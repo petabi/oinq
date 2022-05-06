@@ -1,0 +1,16 @@
+[package]
+name = "oinq"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.56"
+description = "The inter-agent communication protocol in the REview ecosystem"
+readme = "README.md"
+homepage = "https://github.com/petabi/oinq"
+repository = "https://github.com/petabi/oinq"
+license = "Apache-2.0"
+
+[dependencies]
+bincode = "1"
+quinn = "0.8"
+serde = "1"
+thiserror = "1"
