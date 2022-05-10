@@ -13,7 +13,10 @@ pub enum RecvError {
     ReadError(#[from] quinn::ReadExactError),
 }
 
-/// Receives a message with a big-endian 4-byte length header.
+/// Receives and deserializes a message with a big-endian 4-byte length header.
+///
+/// `buf` will be filled with the message data excluding the 4-byte length
+/// header.
 ///
 /// # Errors
 ///
@@ -24,13 +27,29 @@ pub async fn recv_frame<'b, T>(recv: &mut RecvStream, buf: &'b mut Vec<u8>) -> R
 where
     T: Deserialize<'b>,
 {
+    recv_raw_frame(recv, buf).await?;
+    Ok(bincode::DefaultOptions::new().deserialize(buf)?)
+}
+
+/// Receives a sequence of bytes with a big-endian 4-byte length header.
+///
+/// `buf` will be filled with the message data excluding the 4-byte length
+/// header.
+///
+/// # Errors
+///
+/// * `quinn::ReadExactError`: if the message could not be read
+pub async fn recv_raw_frame<'b>(
+    recv: &mut RecvStream,
+    buf: &mut Vec<u8>,
+) -> Result<(), quinn::ReadExactError> {
     let mut len_buf = [0; mem::size_of::<u32>()];
     recv.read_exact(&mut len_buf).await?;
     let len = u32::from_be_bytes(len_buf) as usize;
 
     buf.resize(len, 0);
     recv.read_exact(buf.as_mut_slice()).await?;
-    Ok(bincode::DefaultOptions::new().deserialize(buf)?)
+    Ok(())
 }
 
 #[derive(Debug, Error)]
@@ -44,6 +63,8 @@ pub enum SendError {
 }
 
 /// Sends a message as a stream of bytes with a big-endian 4-byte length header.
+///
+/// `buf` will be cleared after the message is sent.
 ///
 /// # Errors
 ///
