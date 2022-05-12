@@ -20,8 +20,14 @@ pub enum RequestCode {
     /// Reboot the host
     Reboot = 4,
 
+    /// Reload the configuration
+    ReloadConfig = 6,
+
     /// Fetch the TI database and reload it
     ReloadTi = 5,
+
+    /// Collect resource usage stats
+    ResourceUsage = 7,
 
     /// Update the list of trusted domains
     TrustedDomainList = 0,
