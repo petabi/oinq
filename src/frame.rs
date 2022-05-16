@@ -88,6 +88,19 @@ where
     Ok(())
 }
 
+/// Sends a sequence of bytes with a big-endian 4-byte length header.
+///
+/// # Errors
+///
+/// * `SendError::MessageTooLarge`: if the message is too large
+/// * `SendError::WriteError`: if the message could not be written
+pub async fn send_raw(send: &mut SendStream, buf: &[u8]) -> Result<(), SendError> {
+    let len = u32::try_from(buf.len())?;
+    send.write_all(&len.to_be_bytes()).await?;
+    send.write_all(buf).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -107,6 +120,10 @@ mod tests {
         super::recv_raw(&mut client_recv, &mut buf).await.unwrap();
         assert_eq!(buf[0] as usize, "hello".len());
         assert_eq!(&buf[1..], b"hello");
+
+        super::send_raw(&mut server_send, b"world").await.unwrap();
+        super::recv_raw(&mut client_recv, &mut buf).await.unwrap();
+        assert_eq!(buf, b"world");
 
         super::send(&mut server_send, &mut buf, "hello")
             .await
