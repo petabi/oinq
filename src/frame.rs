@@ -93,10 +93,34 @@ mod tests {
     use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 
     use futures::StreamExt;
-    use quinn::{ClientConfig, Endpoint, ServerConfig};
+    use quinn::{ClientConfig, Endpoint, RecvStream, SendStream, ServerConfig};
 
     #[tokio::test]
     async fn send_and_recv() {
+        let (mut server_send, _server_recv, _client_send, mut client_recv) = channel().await;
+
+        let mut buf = Vec::new();
+        super::send(&mut server_send, &mut buf, "hello")
+            .await
+            .unwrap();
+        assert_eq!(buf.len(), 0);
+        super::recv_raw(&mut client_recv, &mut buf).await.unwrap();
+        assert_eq!(buf[0] as usize, "hello".len());
+        assert_eq!(&buf[1..], b"hello");
+
+        super::send(&mut server_send, &mut buf, "hello")
+            .await
+            .unwrap();
+        assert_eq!(buf.len(), 0);
+        let received = super::recv::<&str>(&mut client_recv, &mut buf)
+            .await
+            .unwrap();
+        assert_eq!(received, "hello");
+    }
+
+    /// Creates a bidirectional channel, returning server's send and receive and
+    /// client's send and receive streams.
+    async fn channel() -> (SendStream, RecvStream, SendStream, RecvStream) {
         const TEST_PORT: u16 = 60190;
         const TEST_SERVER_NAME: &str = "test-server";
 
@@ -127,11 +151,11 @@ mod tests {
 
         let mut server_new_connection = server_connecting.await.unwrap();
 
-        let (mut client_send, mut client_recv) =
+        let (mut client_send, client_recv) =
             client_new_connection.connection.open_bi().await.unwrap();
         client_send.write_all(b"ready").await.unwrap();
 
-        let (mut server_send, mut server_recv) = server_new_connection
+        let (server_send, mut server_recv) = server_new_connection
             .bi_streams
             .next()
             .await
@@ -140,22 +164,6 @@ mod tests {
         let mut server_buf = [0; 5];
         server_recv.read_exact(&mut server_buf).await.unwrap();
 
-        let mut buf = Vec::new();
-        super::send(&mut server_send, &mut buf, "hello")
-            .await
-            .unwrap();
-        assert_eq!(buf.len(), 0);
-        super::recv_raw(&mut client_recv, &mut buf).await.unwrap();
-        assert_eq!(buf[0] as usize, "hello".len());
-        assert_eq!(&buf[1..], b"hello");
-
-        super::send(&mut server_send, &mut buf, "hello")
-            .await
-            .unwrap();
-        assert_eq!(buf.len(), 0);
-        let received = super::recv::<&str>(&mut client_recv, &mut buf)
-            .await
-            .unwrap();
-        assert_eq!(received, "hello");
+        (server_send, server_recv, client_send, client_recv)
     }
 }
