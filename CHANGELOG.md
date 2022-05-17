@@ -10,6 +10,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 * `RequestCode` supports serialization with serde.
+* `recv_request_raw` to receive a request without deserialization.
+* `send_request` to send a request with serialization.
 
 ## [0.2.2] - 2022-05-16
 
