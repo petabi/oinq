@@ -1,10 +1,10 @@
 pub mod frame;
 
 use num_enum::TryFromPrimitive;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Numeric representation of the message types.
-#[derive(Clone, Copy, Debug, Deserialize, TryFromPrimitive)]
+#[derive(Clone, Copy, Debug, Deserialize, TryFromPrimitive, Serialize)]
 #[serde(try_from = "u32")]
 #[repr(u32)]
 pub enum RequestCode {
