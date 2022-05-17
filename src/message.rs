@@ -80,7 +80,7 @@ pub async fn send_forward_request<T: Serialize>(
     Ok(())
 }
 
-/// Serializes the given request and stores it in `buf`.
+/// Serializes the given request and appends it to `buf`.
 ///
 /// # Errors
 ///
