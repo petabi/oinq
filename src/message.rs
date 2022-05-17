@@ -26,6 +26,11 @@ pub async fn recv_request_raw<'b>(
     buf: &'b mut Vec<u8>,
 ) -> Result<(RequestCode, &'b [u8]), RecvError> {
     frame::recv_raw(recv, buf).await?;
+    if buf.len() < mem::size_of::<RequestCode>() {
+        return Err(RecvError::DeserializationFailure(Box::new(
+            bincode::ErrorKind::SizeLimit,
+        )));
+    }
     let code = bincode::deserialize(&buf[..mem::size_of::<RequestCode>()])?;
     Ok((code, buf[mem::size_of::<RequestCode>()..].as_ref()))
 }
