@@ -35,7 +35,7 @@ pub async fn recv_request_raw<'b>(
     Ok((code, buf[mem::size_of::<RequestCode>()..].as_ref()))
 }
 
-/// Sends a message with a big-endian 4-byte length header.
+/// Sends a request with a big-endian 4-byte length header.
 ///
 /// # Errors
 ///
@@ -43,20 +43,62 @@ pub async fn recv_request_raw<'b>(
 /// * `SendError::WriteError` if the message could not be written
 pub async fn send_request<T: Serialize>(
     send: &mut SendStream,
-    mut buf: &mut Vec<u8>,
+    buf: &mut Vec<u8>,
     code: RequestCode,
     body: T,
 ) -> Result<(), SendError> {
     buf.clear();
-    bincode::serialize_into(&mut buf, &code)?;
-    bincode::DefaultOptions::new().serialize_into(&mut buf, &body)?;
+    serialize_request(buf, code, body)?;
     frame::send_raw(send, buf).await?;
     buf.clear();
     Ok(())
 }
 
+/// Sends a request encapsulated in a `RequestCode::Forward` request, with a
+/// big-endian 4-byte length header.
+///
+/// # Errors
+///
+/// * `SendError::SerializationFailure` if the message could not be serialized
+/// * `SendError::WriteError` if the message could not be written
+pub async fn send_forward_request<T: Serialize>(
+    send: &mut SendStream,
+    mut buf: &mut Vec<u8>,
+    dst: &str,
+    code: RequestCode,
+    body: T,
+) -> Result<(), SendError> {
+    buf.clear();
+    bincode::serialize_into(&mut buf, &RequestCode::Forward)?;
+    let codec = bincode::DefaultOptions::new();
+    codec.serialize_into(&mut buf, dst)?;
+    let len = codec.serialized_size(&body)? + mem::size_of::<RequestCode>() as u64;
+    codec.serialize_into(&mut buf, &len)?;
+    serialize_request(buf, code, body)?;
+    frame::send_raw(send, buf).await?;
+    buf.clear();
+    Ok(())
+}
+
+/// Serializes the given request and stores it in `buf`.
+///
+/// # Errors
+///
+/// * `bincode::Error` if the message could not be serialized
+fn serialize_request<T: Serialize>(
+    mut buf: &mut Vec<u8>,
+    code: RequestCode,
+    body: T,
+) -> Result<(), bincode::Error> {
+    bincode::serialize_into(&mut buf, &code)?;
+    bincode::DefaultOptions::new().serialize_into(buf, &body)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::mem;
+
     use bincode::Options;
 
     use crate::{frame::channel, RequestCode};
@@ -69,7 +111,7 @@ mod tests {
             channel(TEST_PORT).await;
 
         let mut buf = Vec::new();
-        super::send_request(&mut server_send, &mut buf, RequestCode::ReloadTi, "hello")
+        super::send_request(&mut server_send, &mut buf, RequestCode::ReloadTi, ())
             .await
             .unwrap();
         assert!(buf.is_empty());
@@ -77,9 +119,29 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(code, RequestCode::ReloadTi);
-        let msg = bincode::DefaultOptions::new()
-            .deserialize::<&str>(body)
+        assert!(body.is_empty());
+
+        buf.clear();
+        super::send_forward_request(
+            &mut server_send,
+            &mut buf,
+            "agent@host",
+            RequestCode::ReloadTi,
+            (),
+        )
+        .await
+        .unwrap();
+        let (code, body) = super::recv_request_raw(&mut client_recv, &mut buf)
+            .await
             .unwrap();
-        assert_eq!(msg, "hello");
+        assert_eq!(code, RequestCode::Forward);
+        let (dst, msg) = bincode::DefaultOptions::new()
+            .deserialize::<(String, &[u8])>(body)
+            .unwrap();
+        assert_eq!(dst, "agent@host");
+        assert_eq!(msg.len(), mem::size_of::<RequestCode>());
+        let code =
+            bincode::deserialize::<RequestCode>(&msg[..mem::size_of::<RequestCode>()]).unwrap();
+        assert_eq!(code, RequestCode::ReloadTi);
     }
 }
