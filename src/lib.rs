@@ -1,5 +1,6 @@
 pub mod frame;
 pub mod message;
+pub mod request;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
