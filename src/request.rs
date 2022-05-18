@@ -10,11 +10,11 @@ use crate::frame;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ResourceUsage {
-    cpu_usage: f32,
-    total_memory: u64,
-    used_memory: u64,
-    total_disk_space: u64,
-    used_disk_space: u64,
+    pub cpu_usage: f32,
+    pub total_memory: u64,
+    pub used_memory: u64,
+    pub total_disk_space: u64,
+    pub used_disk_space: u64,
 }
 
 /// Sends resource usage stats to the agent.
