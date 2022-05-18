@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use gethostname::gethostname;
 use quinn::SendStream;
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +27,13 @@ pub async fn handle_resource_usage(
     buf: &mut Vec<u8>,
 ) -> Result<(), frame::SendError> {
     let usage = resource_usage().await;
-    frame::send(send, buf, Ok(usage) as Result<ResourceUsage, &str>).await
+    frame::send(
+        send,
+        buf,
+        Ok((gethostname().to_string_lossy().into_owned(), usage))
+            as Result<(String, ResourceUsage), &str>,
+    )
+    .await
 }
 
 async fn resource_usage() -> ResourceUsage {

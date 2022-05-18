@@ -11,6 +11,7 @@ license = "Apache-2.0"
 
 [dependencies]
 bincode = "1"
+gethostname = "0.2"
 num_enum = "0.5"
 quinn = "0.8"
 serde = { version = "1", features = ["derive"] }
