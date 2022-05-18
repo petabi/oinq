@@ -10,10 +10,19 @@ use crate::frame;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ResourceUsage {
+    /// The average CPU usage in percent.
     pub cpu_usage: f32,
+
+    /// The RAM size in KB.
     pub total_memory: u64,
+
+    /// The amount of used RAM in KB.
     pub used_memory: u64,
+
+    /// The total disk space in bytes.
     pub total_disk_space: u64,
+
+    /// The total disk space in bytes that is currently used.
     pub used_disk_space: u64,
 }
 
