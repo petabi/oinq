@@ -105,29 +105,35 @@ pub async fn send_raw(send: &mut SendStream, buf: &[u8]) -> Result<(), SendError
 mod tests {
     #[tokio::test]
     async fn send_and_recv() {
-        const TEST_PORT: u16 = 60190;
+        use crate::test::CHANNEL;
 
-        let (mut server_send, _server_recv, _client_send, mut client_recv) =
-            crate::test::channel(TEST_PORT).await;
+        let channel_lock = CHANNEL.get().await;
+        let mut channel = channel_lock.write().await;
 
         let mut buf = Vec::new();
-        super::send(&mut server_send, &mut buf, "hello")
+        super::send(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
         assert_eq!(buf.len(), 0);
-        super::recv_raw(&mut client_recv, &mut buf).await.unwrap();
+        super::recv_raw(&mut channel.client.recv, &mut buf)
+            .await
+            .unwrap();
         assert_eq!(buf[0] as usize, "hello".len());
         assert_eq!(&buf[1..], b"hello");
 
-        super::send_raw(&mut server_send, b"world").await.unwrap();
-        super::recv_raw(&mut client_recv, &mut buf).await.unwrap();
+        super::send_raw(&mut channel.server.send, b"world")
+            .await
+            .unwrap();
+        super::recv_raw(&mut channel.client.recv, &mut buf)
+            .await
+            .unwrap();
         assert_eq!(buf, b"world");
 
-        super::send(&mut server_send, &mut buf, "hello")
+        super::send(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
         assert!(buf.is_empty());
-        let received = super::recv::<&str>(&mut client_recv, &mut buf)
+        let received = super::recv::<&str>(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
         assert_eq!(received, "hello");

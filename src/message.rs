@@ -101,21 +101,26 @@ mod tests {
 
     use bincode::Options;
 
-    use crate::{test::channel, RequestCode};
+    use crate::RequestCode;
 
     #[tokio::test]
     async fn send_and_recv() {
-        const TEST_PORT: u16 = 60191;
+        use crate::test::CHANNEL;
 
-        let (mut server_send, _server_recv, _client_send, mut client_recv) =
-            channel(TEST_PORT).await;
+        let channel_lock = CHANNEL.get().await;
+        let mut channel = channel_lock.write().await;
 
         let mut buf = Vec::new();
-        super::send_request(&mut server_send, &mut buf, RequestCode::ReloadTi, ())
-            .await
-            .unwrap();
+        super::send_request(
+            &mut channel.server.send,
+            &mut buf,
+            RequestCode::ReloadTi,
+            (),
+        )
+        .await
+        .unwrap();
         assert!(buf.is_empty());
-        let (code, body) = super::recv_request_raw(&mut client_recv, &mut buf)
+        let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
         assert_eq!(code, RequestCode::ReloadTi);
@@ -123,7 +128,7 @@ mod tests {
 
         buf.clear();
         super::send_forward_request(
-            &mut server_send,
+            &mut channel.server.send,
             &mut buf,
             "agent@host",
             RequestCode::ReloadTi,
@@ -131,7 +136,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let (code, body) = super::recv_request_raw(&mut client_recv, &mut buf)
+        let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
         assert_eq!(code, RequestCode::Forward);

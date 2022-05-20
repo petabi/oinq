@@ -1,17 +1,33 @@
 //! Shared test code
 
+use async_once::AsyncOnce;
+use lazy_static::lazy_static;
 use quinn::{RecvStream, SendStream};
+use tokio::sync::RwLock;
+
+pub(crate) struct Channel {
+    pub(crate) server: Endpoint,
+    pub(crate) client: Endpoint,
+}
+
+pub(crate) struct Endpoint {
+    pub(crate) send: SendStream,
+    pub(crate) recv: RecvStream,
+}
+
+lazy_static! {
+    pub(crate) static ref CHANNEL: AsyncOnce<RwLock<Channel>> = AsyncOnce::new(channel());
+}
 
 /// Creates a bidirectional channel, returning server's send and receive and
 /// client's send and receive streams.
-#[cfg(test)]
-pub(crate) async fn channel(port: u16) -> (SendStream, RecvStream, SendStream, RecvStream) {
+pub(crate) async fn channel() -> RwLock<Channel> {
     use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 
     use futures::StreamExt;
-    use quinn::{ClientConfig, Endpoint, ServerConfig};
 
     const TEST_SERVER_NAME: &str = "test-server";
+    const TEST_PORT: u16 = 60190;
 
     let cert =
         rcgen::generate_simple_self_signed([TEST_SERVER_NAME.to_string()]).expect("infallible");
@@ -19,15 +35,17 @@ pub(crate) async fn channel(port: u16) -> (SendStream, RecvStream, SendStream, R
         cert.serialize_der().expect("infallible"),
     )];
     let key_der = rustls::PrivateKey(cert.serialize_private_key_der());
-    let server_config = ServerConfig::with_single_cert(cert_chain, key_der).expect("infallible");
-    let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), port);
-    let (_server_endpoint, mut incoming) = Endpoint::server(server_config, server_addr).unwrap();
+    let server_config =
+        quinn::ServerConfig::with_single_cert(cert_chain, key_der).expect("infallible");
+    let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), TEST_PORT);
+    let (_server_endpoint, mut incoming) =
+        quinn::Endpoint::server(server_config, server_addr).unwrap();
 
     let mut root_cert_store = rustls::RootCertStore::empty();
     root_cert_store.add_parsable_certificates(&[cert.serialize_der().expect("infallible")]);
     let client_endpoint =
-        Endpoint::client(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)).unwrap();
-    let client_config = ClientConfig::with_root_certificates(root_cert_store);
+        quinn::Endpoint::client(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)).unwrap();
+    let client_config = quinn::ClientConfig::with_root_certificates(root_cert_store);
     let client_connecting = client_endpoint
         .connect_with(client_config, server_addr, TEST_SERVER_NAME)
         .unwrap();
@@ -50,5 +68,14 @@ pub(crate) async fn channel(port: u16) -> (SendStream, RecvStream, SendStream, R
     let mut server_buf = [0; 5];
     server_recv.read_exact(&mut server_buf).await.unwrap();
 
-    (server_send, server_recv, client_send, client_recv)
+    RwLock::new(Channel {
+        server: self::Endpoint {
+            send: server_send,
+            recv: server_recv,
+        },
+        client: self::Endpoint {
+            send: client_send,
+            recv: client_recv,
+        },
+    })
 }
