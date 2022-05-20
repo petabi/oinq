@@ -1,6 +1,8 @@
 pub mod frame;
 pub mod message;
 pub mod request;
+#[cfg(test)]
+mod test;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};

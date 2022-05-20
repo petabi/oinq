@@ -101,7 +101,7 @@ mod tests {
 
     use bincode::Options;
 
-    use crate::{frame::channel, RequestCode};
+    use crate::{test::channel, RequestCode};
 
     #[tokio::test]
     async fn send_and_recv() {
