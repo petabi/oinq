@@ -105,10 +105,10 @@ pub async fn send_raw(send: &mut SendStream, buf: &[u8]) -> Result<(), SendError
 mod tests {
     #[tokio::test]
     async fn send_and_recv() {
-        use crate::test::CHANNEL;
+        use crate::test::{channel, TOKEN};
 
-        let channel_lock = CHANNEL.get().await;
-        let mut channel = channel_lock.write().await;
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
 
         let mut buf = Vec::new();
         super::send(&mut channel.server.send, &mut buf, "hello")

@@ -1,9 +1,8 @@
 //! Shared test code
 
-use async_once::AsyncOnce;
 use lazy_static::lazy_static;
 use quinn::{RecvStream, SendStream};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 pub(crate) struct Channel {
     pub(crate) server: Endpoint,
@@ -16,12 +15,12 @@ pub(crate) struct Endpoint {
 }
 
 lazy_static! {
-    pub(crate) static ref CHANNEL: AsyncOnce<RwLock<Channel>> = AsyncOnce::new(channel());
+    pub(crate) static ref TOKEN: Mutex<u32> = Mutex::new(0);
 }
 
 /// Creates a bidirectional channel, returning server's send and receive and
 /// client's send and receive streams.
-pub(crate) async fn channel() -> RwLock<Channel> {
+pub(crate) async fn channel() -> Channel {
     use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 
     use futures::StreamExt;
@@ -68,7 +67,7 @@ pub(crate) async fn channel() -> RwLock<Channel> {
     let mut server_buf = [0; 5];
     server_recv.read_exact(&mut server_buf).await.unwrap();
 
-    RwLock::new(Channel {
+    Channel {
         server: self::Endpoint {
             send: server_send,
             recv: server_recv,
@@ -77,5 +76,5 @@ pub(crate) async fn channel() -> RwLock<Channel> {
             send: client_send,
             recv: client_recv,
         },
-    })
+    }
 }
