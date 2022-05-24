@@ -1,6 +1,6 @@
 //! Functions and errors for handling messages.
 
-use std::mem;
+use std::{fmt, mem};
 
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
@@ -37,6 +37,8 @@ pub async fn recv_request_raw<'b>(
 
 /// Sends a request with a big-endian 4-byte length header.
 ///
+/// `buf` will be cleared after the response is sent.
+///
 /// # Errors
 ///
 /// * `SendError::SerializationFailure` if the message could not be serialized
@@ -56,6 +58,8 @@ pub async fn send_request<T: Serialize>(
 
 /// Sends a request encapsulated in a `RequestCode::Forward` request, with a
 /// big-endian 4-byte length header.
+///
+/// `buf` will be cleared after the response is sent.
 ///
 /// # Errors
 ///
@@ -95,18 +99,51 @@ fn serialize_request<T: Serialize>(
     Ok(())
 }
 
+/// Sends an `Ok` response.
+///
+/// `buf` will be cleared after the response is sent.
+///
+/// # Errors
+///
+/// * `SendError::SerializationFailure` if the message could not be serialized
+/// * `SendError::WriteError` if the message could not be written
+pub async fn send_ok<T: Serialize>(
+    send: &mut SendStream,
+    buf: &mut Vec<u8>,
+    body: T,
+) -> Result<(), SendError> {
+    frame::send(send, buf, Ok(body) as Result<T, &str>).await?;
+    Ok(())
+}
+
+/// Sends an `Err` response.
+///
+/// `buf` will be cleared after the response is sent.
+///
+/// # Errors
+///
+/// * `SendError::SerializationFailure` if the message could not be serialized
+/// * `SendError::WriteError` if the message could not be written
+pub async fn send_err<E: fmt::Display>(
+    send: &mut SendStream,
+    buf: &mut Vec<u8>,
+    e: E,
+) -> Result<(), SendError> {
+    frame::send(send, buf, Err(format!("{:#}", e)) as Result<(), String>).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::mem;
 
     use bincode::Options;
 
-    use crate::RequestCode;
+    use crate::test::{channel, TOKEN};
+    use crate::{frame, RequestCode};
 
     #[tokio::test]
     async fn send_and_recv() {
-        use crate::test::{channel, TOKEN};
-
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -148,5 +185,37 @@ mod tests {
         let code =
             bincode::deserialize::<RequestCode>(&msg[..mem::size_of::<RequestCode>()]).unwrap();
         assert_eq!(code, RequestCode::ReloadTi);
+    }
+
+    #[tokio::test]
+    async fn send_ok() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let mut buf = Vec::new();
+        super::send_ok(&mut channel.server.send, &mut buf, "hello")
+            .await
+            .unwrap();
+        assert!(buf.is_empty());
+        let body: Result<&str, &str> = frame::recv(&mut channel.client.recv, &mut buf)
+            .await
+            .unwrap();
+        assert_eq!(body, Ok("hello"));
+    }
+
+    #[tokio::test]
+    async fn send_err() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let mut buf = Vec::new();
+        super::send_err(&mut channel.server.send, &mut buf, "hello")
+            .await
+            .unwrap();
+        assert!(buf.is_empty());
+        let body: Result<(), &str> = frame::recv(&mut channel.client.recv, &mut buf)
+            .await
+            .unwrap();
+        assert_eq!(body, Err("hello"));
     }
 }
