@@ -46,8 +46,10 @@ pub trait Handler: Send {
         return Err("not supported".to_string());
     }
 
-    async fn resource_usage(&mut self) -> Result<(), String> {
-        return Err("not supported".to_string());
+    /// Returns the hostname and the cpu, memory, and disk usage.
+    async fn resource_usage(&mut self) -> Result<(String, ResourceUsage), String> {
+        let usage = resource_usage().await;
+        Ok((gethostname().to_string_lossy().into_owned(), usage))
     }
 
     async fn trusted_domain_list(&mut self, _domains: &[&str]) -> Result<(), String> {
@@ -219,16 +221,18 @@ async fn resource_usage() -> ResourceUsage {
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
+
     use crate::{
         frame, message,
         test::{channel, TOKEN},
         RequestCode,
     };
 
+    use super::ResourceUsage;
+
     #[tokio::test]
     async fn handle() {
-        use async_trait::async_trait;
-
         #[derive(Default)]
         struct TestHandler {
             reboot_count: usize,
@@ -277,6 +281,7 @@ mod tests {
             &mut channel.server.recv,
         )
         .await;
+        assert!(res.is_err());
         assert_eq!(handler.reboot_count, 1);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
@@ -286,7 +291,46 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(buf, b"forwarded ReloadTi to agent");
+    }
+
+    #[tokio::test]
+    async fn handle_resource_usage() {
+        struct TestHandler {}
+
+        #[async_trait]
+        impl super::Handler for TestHandler {}
+
+        let mut handler = TestHandler {};
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let mut buf = Vec::new();
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::ResourceUsage,
+            (),
+        )
+        .await;
+        assert!(res.is_ok());
+        let res = frame::send_raw(&mut channel.client.send, b"\xff\xff\xff\xff").await;
+        assert!(res.is_ok());
+
+        let res = super::handle(
+            &mut handler,
+            &mut channel.server.send,
+            &mut channel.server.recv,
+        )
+        .await;
         assert!(res.is_err());
+        let (_hostname, usage) =
+            frame::recv::<Result<(&str, ResourceUsage), &str>>(&mut channel.client.recv, &mut buf)
+                .await
+                .unwrap()
+                .unwrap();
+        assert!(0.0 <= usage.cpu_usage && usage.cpu_usage <= 100.0);
+        assert!(usage.used_memory <= usage.total_memory);
+        assert!(usage.used_disk_space <= usage.total_disk_space);
     }
 
     #[tokio::test]
