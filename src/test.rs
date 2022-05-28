@@ -37,8 +37,23 @@ pub(crate) async fn channel() -> Channel {
     let server_config =
         quinn::ServerConfig::with_single_cert(cert_chain, key_der).expect("infallible");
     let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), TEST_PORT);
-    let (_server_endpoint, mut incoming) =
-        quinn::Endpoint::server(server_config, server_addr).unwrap();
+    let (_server_endpoint, mut incoming) = {
+        loop {
+            match quinn::Endpoint::server(server_config.clone(), server_addr) {
+                Ok((endpoint, incoming)) => {
+                    break (endpoint, incoming);
+                }
+                Err(e) => {
+                    if e.kind() == tokio::io::ErrorKind::AddrInUse {
+                        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                        continue;
+                    } else {
+                        panic!("{}", e);
+                    }
+                }
+            }
+        }
+    };
 
     let mut root_cert_store = rustls::RootCertStore::empty();
     root_cert_store.add_parsable_certificates(&[cert.serialize_der().expect("infallible")]);
