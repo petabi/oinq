@@ -11,6 +11,7 @@ use thiserror::Error;
 
 use crate::{frame, message, RequestCode};
 
+/// The error type for handling a request.
 #[derive(Debug, Error)]
 pub enum HandlerError {
     #[error("failed to receive request")]
@@ -143,6 +144,7 @@ async fn send_response<T: Serialize>(
     }
 }
 
+/// CPU, memory, and disk usage.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ResourceUsage {
     /// The average CPU usage in percent.
