@@ -183,10 +183,10 @@ pub async fn handle_resource_usage(
 }
 
 async fn resource_usage() -> ResourceUsage {
-    use sysinfo::{DiskExt, ProcessorExt, RefreshKind, System, SystemExt};
+    use sysinfo::{CpuExt, CpuRefreshKind, DiskExt, RefreshKind, System, SystemExt};
 
     let refresh = RefreshKind::new()
-        .with_cpu()
+        .with_cpu(CpuRefreshKind::new().with_cpu_usage())
         .with_disks_list()
         .with_memory();
     let mut system = System::new_with_specifics(refresh);
@@ -213,7 +213,7 @@ async fn resource_usage() -> ResourceUsage {
     system.refresh_cpu();
 
     ResourceUsage {
-        cpu_usage: system.global_processor_info().cpu_usage(),
+        cpu_usage: system.global_cpu_info().cpu_usage(),
         total_memory: system.total_memory(),
         used_memory: system.used_memory(),
         total_disk_space,

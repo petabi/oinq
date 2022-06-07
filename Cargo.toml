@@ -16,7 +16,7 @@ gethostname = "0.2"
 num_enum = "0.5"
 quinn = "0.8"
 serde = { version = "1", features = ["derive"] }
-sysinfo = "0.23"
+sysinfo = "0.24"
 thiserror = "1"
 tokio = "1"
 
