@@ -1,7 +1,7 @@
 //! Shared test code
 
 use lazy_static::lazy_static;
-use quinn::{RecvStream, SendStream};
+use quinn::{NewConnection, RecvStream, SendStream};
 use tokio::sync::Mutex;
 
 pub(crate) struct Channel {
@@ -10,6 +10,7 @@ pub(crate) struct Channel {
 }
 
 pub(crate) struct Endpoint {
+    pub(crate) conn: NewConnection,
     pub(crate) send: SendStream,
     pub(crate) recv: RecvStream,
 }
@@ -84,10 +85,12 @@ pub(crate) async fn channel() -> Channel {
 
     Channel {
         server: self::Endpoint {
+            conn: server_new_connection,
             send: server_send,
             recv: server_recv,
         },
         client: self::Endpoint {
+            conn: client_new_connection,
             send: client_send,
             recv: client_recv,
         },
