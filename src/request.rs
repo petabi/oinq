@@ -107,9 +107,16 @@ pub async fn handle<H: Handler>(
             RequestCode::Reboot => {
                 send_response(send, &mut buf, handler.reboot().await).await?;
             }
-            RequestCode::ReloadConfig => {
-                send_response(send, &mut buf, handler.reload_config().await).await?;
-            }
+            RequestCode::ReloadConfig => match handler.reload_config().await {
+                Ok(_) => {
+                    message::send_ok(send, &mut buf, ()).await?;
+                    break;
+                }
+                Err(e) => {
+                    let err_msg = format!("failed to reload config: {}", e);
+                    message::send_err(send, &mut buf, err_msg).await?;
+                }
+            },
             RequestCode::ReloadTi => {
                 let version = codec
                     .deserialize::<&str>(body)
