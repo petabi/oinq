@@ -250,18 +250,18 @@ pub async fn send_request<H: Serialize, T: Serialize>(
 ///
 /// * `SendError::SerializationFailure` if the message could not be serialized
 /// * `SendError::WriteError` if the message could not be written
-pub async fn send_forward_request<T: Serialize>(
+pub async fn send_forward_request<H: Serialize, T: Serialize>(
     send: &mut SendStream,
     mut buf: &mut Vec<u8>,
     dst: &str,
-    code: RequestCode,
+    code: H,
     body: T,
 ) -> Result<(), SendError> {
     buf.clear();
     bincode::serialize_into(&mut buf, &RequestCode::Forward)?;
     let codec = bincode::DefaultOptions::new();
     codec.serialize_into(&mut buf, dst)?;
-    let len = codec.serialized_size(&body)? + mem::size_of::<RequestCode>() as u64;
+    let len = codec.serialized_size(&body)? + mem::size_of::<H>() as u64;
     codec.serialize_into(&mut buf, &len)?;
     serialize_request(buf, code, body)?;
     frame::send_raw(send, buf).await?;
