@@ -174,59 +174,51 @@ pub async fn server_handshake(
     version_req: &str,
     highest_protocol_version: &str,
 ) -> Result<AgentInfo, HandshakeError> {
-    if let Some(bi_stream) = bi_streams.next().await {
-        match bi_stream {
-            Ok((mut send, mut recv)) => {
-                let mut buf = Vec::new();
-                let mut agent_info = frame::recv::<AgentInfo>(&mut recv, &mut buf)
-                    .await
-                    .map_err(|_| HandshakeError::InvalidMessage)?;
-                agent_info.addr = addr;
-                let version_req =
-                    VersionReq::parse(version_req).expect("valid version requirement");
-                let protocol_version =
-                    Version::parse(&agent_info.protocol_version).map_err(|_| {
-                        HandshakeError::IncompatibleProtocol(
-                            agent_info.protocol_version.clone(),
-                            version_req.to_string(),
-                        )
-                    })?;
-                buf.resize(4, 0);
-                return if version_req.matches(&protocol_version) {
-                    let highest_protocol_version =
-                        Version::parse(highest_protocol_version).expect("valid semver");
-                    if protocol_version <= highest_protocol_version {
-                        send_ok(&mut send, &mut buf, highest_protocol_version.to_string())
-                            .await
-                            .map_err(HandshakeError::from)?;
-                        Ok(agent_info)
-                    } else {
-                        send_err(&mut send, &mut buf, &highest_protocol_version)
-                            .await
-                            .map_err(HandshakeError::from)?;
-                        send.finish().await.ok();
-                        Err(HandshakeError::IncompatibleProtocol(
-                            protocol_version.to_string(),
-                            version_req.to_string(),
-                        ))
-                    }
-                } else {
-                    send_err(&mut send, &mut buf, version_req.to_string())
-                        .await
-                        .map_err(HandshakeError::from)?;
-                    send.finish().await.ok();
-                    Err(HandshakeError::IncompatibleProtocol(
-                        protocol_version.to_string(),
-                        version_req.to_string(),
-                    ))
-                };
-            }
-            Err(e) => {
-                return Err(HandshakeError::ConnectionLost(e));
-            }
+    let (mut send, mut recv) = bi_streams
+        .next()
+        .await
+        .ok_or(HandshakeError::ConnectionClosed)?
+        .map_err(HandshakeError::ConnectionLost)?;
+    let mut buf = Vec::new();
+    let mut agent_info = frame::recv::<AgentInfo>(&mut recv, &mut buf)
+        .await
+        .map_err(|_| HandshakeError::InvalidMessage)?;
+    agent_info.addr = addr;
+    let version_req = VersionReq::parse(version_req).expect("valid version requirement");
+    let protocol_version = Version::parse(&agent_info.protocol_version).map_err(|_| {
+        HandshakeError::IncompatibleProtocol(
+            agent_info.protocol_version.clone(),
+            version_req.to_string(),
+        )
+    })?;
+    if version_req.matches(&protocol_version) {
+        let highest_protocol_version =
+            Version::parse(highest_protocol_version).expect("valid semver");
+        if protocol_version <= highest_protocol_version {
+            send_ok(&mut send, &mut buf, highest_protocol_version.to_string())
+                .await
+                .map_err(HandshakeError::from)?;
+            Ok(agent_info)
+        } else {
+            send_err(&mut send, &mut buf, &highest_protocol_version)
+                .await
+                .map_err(HandshakeError::from)?;
+            send.finish().await.ok();
+            Err(HandshakeError::IncompatibleProtocol(
+                protocol_version.to_string(),
+                version_req.to_string(),
+            ))
         }
+    } else {
+        send_err(&mut send, &mut buf, version_req.to_string())
+            .await
+            .map_err(HandshakeError::from)?;
+        send.finish().await.ok();
+        Err(HandshakeError::IncompatibleProtocol(
+            protocol_version.to_string(),
+            version_req.to_string(),
+        ))
     }
-    Err(HandshakeError::ConnectionClosed)
 }
 
 /// Sends a request with a big-endian 4-byte length header.
