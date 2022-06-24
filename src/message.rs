@@ -1,14 +1,15 @@
 //! Functions and errors for handling messages.
 
+use bincode::Options;
+use futures::StreamExt;
+use gethostname::gethostname;
+use quinn::{Connection, ConnectionError, IncomingBiStreams, RecvStream, SendStream};
+use semver::{Version, VersionReq};
+use serde::{Deserialize, Serialize};
 use std::{
     fmt, mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
-
-use bincode::Options;
-use gethostname::gethostname;
-use quinn::{Connection, ConnectionError, RecvStream, SendStream};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
@@ -45,7 +46,7 @@ pub async fn recv_request_raw<'b>(
 pub enum HandshakeError {
     #[error("connection closed by peer")]
     ConnectionClosed,
-    #[error("cannot create a bidirectional stream for the handshake")]
+    #[error("bidirectional stream for the handshake broken")]
     StreamError(#[from] ConnectionError),
     #[error("cannot receive a handshake response")]
     ReadError(#[from] quinn::ReadError),
@@ -59,6 +60,10 @@ pub enum HandshakeError {
     InvalidResponse,
     #[error("protocol version {0} is required")]
     NewerProtocolRequired(String),
+    #[error("protocol version {0} is not supported, supported version: {1}")]
+    IncompatibleProtocol(String, String),
+    #[error("cannot send a handshake response")]
+    ResponseError(#[from] frame::SendError),
 }
 
 /// Properties of an agent.
@@ -131,6 +136,71 @@ pub async fn handshake(
         .map_err(|e| HandshakeError::NewerProtocolRequired(e.to_string()))?;
 
     Ok((send, recv))
+}
+
+/// Confirm a handshake with the remote peer.
+///
+/// # Errors
+///
+/// Returns `HandshakeError` if the handshake failed.
+pub async fn handshake_with_agent(
+    bi_streams: &mut IncomingBiStreams,
+    addr: SocketAddr,
+    version_req: &str,
+    highest_protocol_version: &str,
+) -> Result<AgentInfo, HandshakeError> {
+    if let Some(bi_stream) = bi_streams.next().await {
+        match bi_stream {
+            Ok((mut send, mut recv)) => {
+                let mut buf = Vec::new();
+                let mut agent_info = frame::recv::<AgentInfo>(&mut recv, &mut buf)
+                    .await
+                    .map_err(|_| HandshakeError::InvalidResponse)?;
+                agent_info.addr = addr;
+                let version_req =
+                    VersionReq::parse(version_req).expect("valid version requirement");
+                let protocol_version =
+                    Version::parse(&agent_info.protocol_version).map_err(|_| {
+                        HandshakeError::IncompatibleProtocol(
+                            agent_info.protocol_version.clone(),
+                            version_req.to_string(),
+                        )
+                    })?;
+                buf.resize(4, 0);
+                return if version_req.matches(&protocol_version) {
+                    let highest_protocol_version =
+                        Version::parse(highest_protocol_version).expect("valid semver");
+                    if protocol_version <= highest_protocol_version {
+                        send_ok(&mut send, &mut buf, highest_protocol_version.to_string())
+                            .await
+                            .map_err(HandshakeError::ResponseError)?;
+                        Ok(agent_info)
+                    } else {
+                        send_err(&mut send, &mut buf, &highest_protocol_version)
+                            .await
+                            .map_err(HandshakeError::ResponseError)?;
+                        send.finish().await.ok();
+                        Err(HandshakeError::NewerProtocolRequired(
+                            version_req.to_string(),
+                        ))
+                    }
+                } else {
+                    send_err(&mut send, &mut buf, version_req.to_string())
+                        .await
+                        .map_err(HandshakeError::ResponseError)?;
+                    send.finish().await.ok();
+                    Err(HandshakeError::IncompatibleProtocol(
+                        protocol_version.to_string(),
+                        version_req.to_string(),
+                    ))
+                };
+            }
+            Err(e) => {
+                return Err(HandshakeError::StreamError(e));
+            }
+        }
+    }
+    Err(HandshakeError::ConnectionClosed)
 }
 
 /// Sends a request with a big-endian 4-byte length header.
@@ -233,7 +303,7 @@ pub async fn send_err<E: fmt::Display>(
 
 #[cfg(test)]
 mod tests {
-    use std::mem::{self, size_of};
+    use std::mem;
 
     use bincode::Options;
 
@@ -242,7 +312,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake() {
-        use futures::StreamExt;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
         const APP_NAME: &str = "oinq";
         const APP_VERSION: &str = "1.0.0";
@@ -264,25 +334,60 @@ mod tests {
             .await
         });
 
-        let (mut send, mut recv) = server.conn.bi_streams.next().await.unwrap().unwrap();
-        let mut buf = vec![0_u8; size_of::<u32>()];
-        let agent_info = frame::recv::<super::AgentInfo>(&mut recv, &mut buf)
-            .await
-            .unwrap();
-        assert_eq!(agent_info.app_name, APP_NAME);
-        assert_eq!(agent_info.version, APP_VERSION);
-        assert_eq!(agent_info.protocol_version, PROTOCOL_VERSION);
-        assert_eq!(agent_info.agent_id, AGENT_ID);
-        frame::send(
-            &mut send,
-            &mut buf,
-            Ok(PROTOCOL_VERSION) as Result<&str, &str>,
+        let agent_info = super::handshake_with_agent(
+            &mut server.conn.bi_streams,
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            PROTOCOL_VERSION,
+            PROTOCOL_VERSION,
         )
         .await
         .unwrap();
 
+        assert_eq!(agent_info.app_name, APP_NAME);
+        assert_eq!(agent_info.version, APP_VERSION);
+        assert_eq!(agent_info.protocol_version, PROTOCOL_VERSION);
+        assert_eq!(agent_info.agent_id, AGENT_ID);
+
         let res = tokio::join!(handle).0.unwrap();
         assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn handshake_err() {
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        const APP_NAME: &str = "oinq";
+        const APP_VERSION: &str = "1.0.0";
+        const PROTOCOL_VERSION: &str = env!("CARGO_PKG_VERSION");
+        const AGENT_ID: &str = "test";
+
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let (mut server, client) = (channel.server, channel.client);
+
+        let handle = tokio::spawn(async move {
+            super::handshake(
+                &client.conn.connection,
+                APP_NAME,
+                APP_VERSION,
+                PROTOCOL_VERSION,
+                AGENT_ID,
+            )
+            .await
+        });
+
+        let res = super::handshake_with_agent(
+            &mut server.conn.bi_streams,
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            &format!("<{}", PROTOCOL_VERSION),
+            PROTOCOL_VERSION,
+        )
+        .await;
+
+        assert!(res.is_err());
+
+        let res = tokio::join!(handle).0.unwrap();
+        assert!(res.is_err());
     }
 
     #[tokio::test]
