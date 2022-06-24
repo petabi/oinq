@@ -5,7 +5,7 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2022-06-24
 
 ### Added
 
@@ -15,6 +15,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* Requires Rust 1.57.0 or later.
 * `message::handshake` is now `message::client_handshake` to differentiate
   itself from the server handshake.
 * `HandshakeError::NewerProtocolRequired` has been replaced with
@@ -95,7 +96,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 * `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
-[Unreleased]: https://github.com/petabi/oinq/compare/0.2.7...main
+[0.3.0]: https://github.com/petabi/oinq/compare/0.2.7...0.3.0
 [0.2.7]: https://github.com/petabi/oinq/compare/0.2.6...0.2.7
 [0.2.6]: https://github.com/petabi/oinq/compare/0.2.5...0.2.6
 [0.2.5]: https://github.com/petabi/oinq/compare/0.2.4...0.2.5
