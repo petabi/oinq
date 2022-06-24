@@ -5,6 +5,7 @@ use std::path::Path;
 use async_trait::async_trait;
 use bincode::Options;
 use gethostname::gethostname;
+use num_enum::FromPrimitive;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -82,7 +83,8 @@ pub async fn handle<H: Handler>(
             }
         };
 
-        match code {
+        let req = RequestCode::from_primitive(code);
+        match req {
             RequestCode::DnsStart => {
                 send_response(send, &mut buf, handler.dns_start().await).await?;
             }
@@ -126,6 +128,10 @@ pub async fn handle<H: Handler>(
                     .map_err(frame::RecvError::DeserializationFailure)?;
                 let result = handler.trusted_domain_list(&domains).await;
                 send_response(send, &mut buf, result).await?;
+            }
+            RequestCode::Unknown => {
+                let err_msg = format!("unknown request code: {}", code);
+                message::send_err(send, &mut buf, err_msg).await?;
             }
         }
     }
@@ -223,6 +229,8 @@ async fn resource_usage() -> ResourceUsage {
 
 #[cfg(test)]
 mod tests {
+    use std::mem::size_of;
+
     use async_trait::async_trait;
 
     use crate::{
@@ -234,7 +242,7 @@ mod tests {
     use super::ResourceUsage;
 
     #[tokio::test]
-    async fn handle() {
+    async fn handle_forward() {
         #[derive(Default)]
         struct TestHandler {
             reboot_count: usize,
@@ -243,8 +251,9 @@ mod tests {
         #[async_trait]
         impl super::Handler for TestHandler {
             async fn forward(&mut self, target: &str, msg: &[u8]) -> Result<Vec<u8>, String> {
-                let code = bincode::deserialize::<RequestCode>(msg).unwrap();
-                let response = format!("forwarded {:?} to {}", code, target);
+                let code = u32::from_le_bytes(msg[..size_of::<u32>()].try_into().unwrap());
+                let req = RequestCode::from(code);
+                let response = format!("forwarded {:?} to {}", req, target);
                 Ok(response.as_bytes().to_vec())
             }
 
@@ -273,8 +282,7 @@ mod tests {
         )
         .await;
         assert!(res.is_ok());
-        let res = frame::send_raw(&mut channel.client.send, b"\xff\xff\xff\xff").await;
-        assert!(res.is_ok());
+        channel.client.send.finish().await.unwrap();
 
         assert_eq!(handler.reboot_count, 0);
         let res = super::handle(
@@ -283,7 +291,7 @@ mod tests {
             &mut channel.server.recv,
         )
         .await;
-        assert!(res.is_err());
+        assert!(res.is_ok());
         assert_eq!(handler.reboot_count, 1);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
@@ -315,8 +323,7 @@ mod tests {
         )
         .await;
         assert!(res.is_ok());
-        let res = frame::send_raw(&mut channel.client.send, b"\xff\xff\xff\xff").await;
-        assert!(res.is_ok());
+        channel.client.send.finish().await.unwrap();
 
         let res = super::handle(
             &mut handler,
@@ -324,7 +331,7 @@ mod tests {
             &mut channel.server.recv,
         )
         .await;
-        assert!(res.is_err());
+        assert!(res.is_ok());
         let (_hostname, usage) =
             frame::recv::<Result<(&str, ResourceUsage), &str>>(&mut channel.client.recv, &mut buf)
                 .await

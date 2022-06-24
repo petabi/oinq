@@ -4,14 +4,10 @@ pub mod request;
 #[cfg(test)]
 mod test;
 
-use num_enum::{IntoPrimitive, TryFromPrimitive};
-use serde::{Deserialize, Serialize};
+use num_enum::{FromPrimitive, IntoPrimitive};
 
 /// Numeric representation of the message types.
-#[derive(
-    Clone, Copy, Debug, Deserialize, IntoPrimitive, PartialEq, Serialize, TryFromPrimitive,
-)]
-#[serde(into = "u32", try_from = "u32")]
+#[derive(Clone, Copy, Debug, IntoPrimitive, PartialEq, FromPrimitive)]
 #[repr(u32)]
 pub enum RequestCode {
     /// Start DNS filtering
@@ -37,20 +33,21 @@ pub enum RequestCode {
 
     /// Update the list of trusted domains
     TrustedDomainList = 0,
+
+    /// Unknown request
+    #[num_enum(default)]
+    Unknown = u32::MAX,
 }
 
 #[cfg(test)]
 mod tests {
+    use num_enum::FromPrimitive;
+
     use super::RequestCode;
 
     #[test]
     fn serde() {
-        let serialized = bincode::serialize(&RequestCode::ResourceUsage).unwrap();
-        assert_eq!(
-            u32::from_le_bytes(serialized.clone().try_into().expect("4 bytes")),
-            RequestCode::ResourceUsage.into()
-        );
-        let code = bincode::deserialize::<u32>(&serialized).unwrap();
-        assert_eq!(code, RequestCode::ResourceUsage.into());
+        assert_eq!(7u32, RequestCode::ResourceUsage.into());
+        assert_eq!(RequestCode::ResourceUsage, RequestCode::from_primitive(7));
     }
 }

@@ -27,18 +27,18 @@ use crate::{
 /// * `RecvError::DeserializationFailure` if the message could not be
 ///   deserialized
 /// * `RecvError::ReadError` if the message could not be read
-pub async fn recv_request_raw<'b, H: Deserialize<'b>>(
+pub async fn recv_request_raw<'b>(
     recv: &mut RecvStream,
     buf: &'b mut Vec<u8>,
-) -> Result<(H, &'b [u8]), RecvError> {
+) -> Result<(u32, &'b [u8]), RecvError> {
     frame::recv_raw(recv, buf).await?;
-    if buf.len() < mem::size_of::<RequestCode>() {
+    if buf.len() < mem::size_of::<u32>() {
         return Err(RecvError::DeserializationFailure(Box::new(
             bincode::ErrorKind::SizeLimit,
         )));
     }
-    let code = bincode::deserialize(&buf[..mem::size_of::<RequestCode>()])?;
-    Ok((code, buf[mem::size_of::<RequestCode>()..].as_ref()))
+    let code = u32::from_le_bytes(buf[..mem::size_of::<u32>()].try_into().expect("4 bytes"));
+    Ok((code, buf[mem::size_of::<u32>()..].as_ref()))
 }
 
 /// The error type for a handshake failure.
@@ -229,12 +229,16 @@ pub async fn server_handshake(
 ///
 /// * `SendError::SerializationFailure` if the message could not be serialized
 /// * `SendError::WriteError` if the message could not be written
-pub async fn send_request<H: Serialize, T: Serialize>(
+pub async fn send_request<C, B>(
     send: &mut SendStream,
     buf: &mut Vec<u8>,
-    code: H,
-    body: T,
-) -> Result<(), SendError> {
+    code: C,
+    body: B,
+) -> Result<(), SendError>
+where
+    C: Into<u32>,
+    B: Serialize,
+{
     buf.clear();
     serialize_request(buf, code, body)?;
     frame::send_raw(send, buf).await?;
@@ -251,18 +255,22 @@ pub async fn send_request<H: Serialize, T: Serialize>(
 ///
 /// * `SendError::SerializationFailure` if the message could not be serialized
 /// * `SendError::WriteError` if the message could not be written
-pub async fn send_forward_request<H: Serialize, T: Serialize>(
+pub async fn send_forward_request<C, B>(
     send: &mut SendStream,
     mut buf: &mut Vec<u8>,
     dst: &str,
-    code: H,
-    body: T,
-) -> Result<(), SendError> {
+    code: C,
+    body: B,
+) -> Result<(), SendError>
+where
+    C: Into<u32>,
+    B: Serialize,
+{
     buf.clear();
-    bincode::serialize_into(&mut buf, &RequestCode::Forward)?;
+    buf.extend_from_slice(&u32::from(RequestCode::Forward).to_le_bytes());
     let codec = bincode::DefaultOptions::new();
     codec.serialize_into(&mut buf, dst)?;
-    let len = codec.serialized_size(&body)? + mem::size_of::<H>() as u64;
+    let len = codec.serialized_size(&body)? + mem::size_of::<u32>() as u64;
     codec.serialize_into(&mut buf, &len)?;
     serialize_request(buf, code, body)?;
     frame::send_raw(send, buf).await?;
@@ -275,12 +283,12 @@ pub async fn send_forward_request<H: Serialize, T: Serialize>(
 /// # Errors
 ///
 /// * `bincode::Error` if the message could not be serialized
-fn serialize_request<H: Serialize, T: Serialize>(
-    mut buf: &mut Vec<u8>,
-    code: H,
-    body: T,
-) -> Result<(), bincode::Error> {
-    bincode::serialize_into(&mut buf, &code)?;
+fn serialize_request<C, B>(buf: &mut Vec<u8>, code: C, body: B) -> Result<(), bincode::Error>
+where
+    C: Into<u32>,
+    B: Serialize,
+{
+    buf.extend_from_slice(&code.into().to_le_bytes());
     bincode::DefaultOptions::new().serialize_into(buf, &body)?;
     Ok(())
 }
@@ -478,11 +486,10 @@ mod tests {
         .await
         .unwrap();
         assert!(buf.is_empty());
-        let (code, body) =
-            super::recv_request_raw::<RequestCode>(&mut channel.client.recv, &mut buf)
-                .await
-                .unwrap();
-        assert_eq!(code, RequestCode::ReloadTi);
+        let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
+            .await
+            .unwrap();
+        assert_eq!(code, RequestCode::ReloadTi.into());
         assert!(body.is_empty());
 
         buf.clear();
@@ -495,19 +502,17 @@ mod tests {
         )
         .await
         .unwrap();
-        let (code, body) =
-            super::recv_request_raw::<RequestCode>(&mut channel.client.recv, &mut buf)
-                .await
-                .unwrap();
-        assert_eq!(code, RequestCode::Forward);
+        let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
+            .await
+            .unwrap();
+        assert_eq!(code, RequestCode::Forward.into());
         let (dst, msg) = bincode::DefaultOptions::new()
             .deserialize::<(String, &[u8])>(body)
             .unwrap();
         assert_eq!(dst, "agent@host");
-        assert_eq!(msg.len(), mem::size_of::<RequestCode>());
-        let code =
-            bincode::deserialize::<RequestCode>(&msg[..mem::size_of::<RequestCode>()]).unwrap();
-        assert_eq!(code, RequestCode::ReloadTi);
+        assert_eq!(msg.len(), mem::size_of::<u32>());
+        let code = u32::from_le_bytes(msg[..mem::size_of::<u32>()].try_into().expect("4 bytes"));
+        assert_eq!(RequestCode::from(code), RequestCode::ReloadTi);
     }
 
     #[tokio::test]
