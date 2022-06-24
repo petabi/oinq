@@ -5,6 +5,23 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+* When the received request code is not recognized, the response code is set to
+  `RequestCode::Unknown`.
+* `message::send_request` and `message::send_forward_request` can accept any
+  type implementing `Into<u32>` as `code`.
+
+### Changed
+
+* `RequestCode` no longer implements `Serialize` and `Deserialize`; it should be
+  converted to/from `u32` for serialization/deserialization.
+* `message::recv_request_raw` returns the request code as `u32` instead of
+  `RequestCode`.
+* A client sending an unknown request code will receive an error message.
+
 ## [0.3.0] - 2022-06-24
 
 ### Added
@@ -96,6 +113,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 * `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[Unreleased]: https://github.com/petabi/oinq/compare/0.3.0...main
 [0.3.0]: https://github.com/petabi/oinq/compare/0.2.7...0.3.0
 [0.2.7]: https://github.com/petabi/oinq/compare/0.2.6...0.2.7
 [0.2.6]: https://github.com/petabi/oinq/compare/0.2.5...0.2.6
