@@ -58,9 +58,7 @@ pub enum HandshakeError {
     MessageTooLarge,
     #[error("invalid handshake response")]
     InvalidResponse,
-    #[error("protocol version {0} is required")]
-    NewerProtocolRequired(String),
-    #[error("protocol version {0} is not supported, supported version: {1}")]
+    #[error("protocol version {0} is not supported; version {1} is required")]
     IncompatibleProtocol(String, String),
     #[error("cannot send a handshake response")]
     ResponseError(#[from] frame::SendError),
@@ -150,7 +148,9 @@ pub async fn handshake(
     let de = bincode::DefaultOptions::new();
     de.deserialize::<Result<&str, &str>>(&buf)
         .map_err(|_| HandshakeError::InvalidResponse)?
-        .map_err(|e| HandshakeError::NewerProtocolRequired(e.to_string()))?;
+        .map_err(|e| {
+            HandshakeError::IncompatibleProtocol(protocol_version.to_string(), e.to_string())
+        })?;
 
     Ok((send, recv))
 }
@@ -197,7 +197,8 @@ pub async fn handshake_with_agent(
                             .await
                             .map_err(HandshakeError::ResponseError)?;
                         send.finish().await.ok();
-                        Err(HandshakeError::NewerProtocolRequired(
+                        Err(HandshakeError::IncompatibleProtocol(
+                            protocol_version.to_string(),
                             version_req.to_string(),
                         ))
                     }
