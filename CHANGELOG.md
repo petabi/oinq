@@ -9,8 +9,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-* `HandshakeError::IncompatibleProtocol` carries both the current version and
-  the required version.
+* `HandshakeError::NewerProtocolRequired` has been replaced with
+  `HandshakeError::IncompatibleProtocol`, which carries both the current version
+  and the required version.
+* `HandhsakeError::StreamError` has been replaced with
+  `HandshakeError::ConnectionLost`.
 
 ## [0.2.7] - 2022-06-08
 

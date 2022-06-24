@@ -46,18 +46,18 @@ pub async fn recv_request_raw<'b>(
 pub enum HandshakeError {
     #[error("connection closed by peer")]
     ConnectionClosed,
-    #[error("bidirectional stream for the handshake broken")]
-    StreamError(#[from] ConnectionError),
-    #[error("cannot receive a handshake response")]
+    #[error("connection lost")]
+    ConnectionLost(#[from] ConnectionError),
+    #[error("cannot receive a message")]
     ReadError(#[from] quinn::ReadError),
-    #[error("cannot send a handshake request")]
+    #[error("cannot send a message")]
     WriteError(#[from] quinn::WriteError),
-    #[error("cannot serialize a handshake request")]
+    #[error("cannot serialize a message")]
     SerializationFailure(#[from] bincode::Error),
     #[error("arguments are too long")]
     MessageTooLarge,
-    #[error("invalid handshake response")]
-    InvalidResponse,
+    #[error("invalid message")]
+    InvalidMessage,
     #[error("protocol version {0} is not supported; version {1} is required")]
     IncompatibleProtocol(String, String),
     #[error("cannot send a handshake response")]
@@ -147,7 +147,7 @@ pub async fn handshake(
     }
     let de = bincode::DefaultOptions::new();
     de.deserialize::<Result<&str, &str>>(&buf)
-        .map_err(|_| HandshakeError::InvalidResponse)?
+        .map_err(|_| HandshakeError::InvalidMessage)?
         .map_err(|e| {
             HandshakeError::IncompatibleProtocol(protocol_version.to_string(), e.to_string())
         })?;
@@ -172,7 +172,7 @@ pub async fn handshake_with_agent(
                 let mut buf = Vec::new();
                 let mut agent_info = frame::recv::<AgentInfo>(&mut recv, &mut buf)
                     .await
-                    .map_err(|_| HandshakeError::InvalidResponse)?;
+                    .map_err(|_| HandshakeError::InvalidMessage)?;
                 agent_info.addr = addr;
                 let version_req =
                     VersionReq::parse(version_req).expect("valid version requirement");
@@ -214,7 +214,7 @@ pub async fn handshake_with_agent(
                 };
             }
             Err(e) => {
-                return Err(HandshakeError::StreamError(e));
+                return Err(HandshakeError::ConnectionLost(e));
             }
         }
     }
