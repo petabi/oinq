@@ -60,8 +60,16 @@ pub enum HandshakeError {
     InvalidMessage,
     #[error("protocol version {0} is not supported; version {1} is required")]
     IncompatibleProtocol(String, String),
-    #[error("cannot send a handshake response")]
-    ResponseError(#[from] frame::SendError),
+}
+
+impl From<SendError> for HandshakeError {
+    fn from(e: SendError) -> Self {
+        match e {
+            SendError::SerializationFailure(e) => HandshakeError::SerializationFailure(e),
+            SendError::MessageTooLarge(_) => HandshakeError::MessageTooLarge,
+            SendError::WriteError(e) => HandshakeError::WriteError(e),
+        }
+    }
 }
 
 /// Properties of an agent.
@@ -190,12 +198,12 @@ pub async fn handshake_with_agent(
                     if protocol_version <= highest_protocol_version {
                         send_ok(&mut send, &mut buf, highest_protocol_version.to_string())
                             .await
-                            .map_err(HandshakeError::ResponseError)?;
+                            .map_err(HandshakeError::from)?;
                         Ok(agent_info)
                     } else {
                         send_err(&mut send, &mut buf, &highest_protocol_version)
                             .await
-                            .map_err(HandshakeError::ResponseError)?;
+                            .map_err(HandshakeError::from)?;
                         send.finish().await.ok();
                         Err(HandshakeError::IncompatibleProtocol(
                             protocol_version.to_string(),
@@ -205,7 +213,7 @@ pub async fn handshake_with_agent(
                 } else {
                     send_err(&mut send, &mut buf, version_req.to_string())
                         .await
-                        .map_err(HandshakeError::ResponseError)?;
+                        .map_err(HandshakeError::from)?;
                     send.finish().await.ok();
                     Err(HandshakeError::IncompatibleProtocol(
                         protocol_version.to_string(),
