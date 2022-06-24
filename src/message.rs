@@ -77,6 +77,23 @@ pub struct AgentInfo {
     pub addr: SocketAddr,
 }
 
+impl std::fmt::Display for AgentInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}, {}@{}, {}",
+            self.app_name, self.agent_id, self.host_id, self.addr
+        )
+    }
+}
+
+impl AgentInfo {
+    #[must_use]
+    pub fn key(&self) -> String {
+        format!("{}@{}", self.agent_id, self.host_id)
+    }
+}
+
 /// Perform a handshake with the remote peer.
 ///
 /// # Errors
@@ -348,12 +365,23 @@ mod tests {
         assert_eq!(agent_info.protocol_version, PROTOCOL_VERSION);
         assert_eq!(agent_info.agent_id, AGENT_ID);
 
+        assert_eq!(
+            agent_info.key(),
+            format!("{}@{}", agent_info.agent_id, agent_info.host_id)
+        );
+        assert_eq!(
+            agent_info.to_string(),
+            format!(
+                "{}, {}@{}, {}",
+                agent_info.app_name, agent_info.agent_id, agent_info.host_id, agent_info.addr
+            )
+        );
         let res = tokio::join!(handle).0.unwrap();
         assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn handshake_err() {
+    async fn handshake_version_incompatible_err() {
         use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
         const APP_NAME: &str = "oinq";
@@ -381,6 +409,50 @@ mod tests {
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             &format!("<{}", PROTOCOL_VERSION),
             PROTOCOL_VERSION,
+        )
+        .await;
+
+        assert!(res.is_err());
+
+        let res = tokio::join!(handle).0.unwrap();
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn handshake_incompatible_err() {
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        const APP_NAME: &str = "oinq";
+        const APP_VERSION: &str = "1.0.0";
+        const PROTOCOL_VERSION: &str = env!("CARGO_PKG_VERSION");
+        const AGENT_ID: &str = "test";
+
+        let version_req = semver::VersionReq::parse(&format!(">={}", PROTOCOL_VERSION)).unwrap();
+        let mut highest_version = semver::Version::parse(PROTOCOL_VERSION).unwrap();
+        highest_version.patch += 1;
+        let mut protocol_version = highest_version.clone();
+        protocol_version.minor += 1;
+
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let (mut server, client) = (channel.server, channel.client);
+
+        let handle = tokio::spawn(async move {
+            super::handshake(
+                &client.conn.connection,
+                APP_NAME,
+                APP_VERSION,
+                &protocol_version.to_string(),
+                AGENT_ID,
+            )
+            .await
+        });
+
+        let res = super::handshake_with_agent(
+            &mut server.conn.bi_streams,
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            &version_req.to_string(),
+            &highest_version.to_string(),
         )
         .await;
 
