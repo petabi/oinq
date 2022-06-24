@@ -100,12 +100,12 @@ impl AgentInfo {
     }
 }
 
-/// Perform a handshake with the remote peer.
+/// Sends a handshake request and processes the response.
 ///
 /// # Errors
 ///
 /// Returns `HandshakeError` if the handshake failed.
-pub async fn handshake(
+pub async fn client_handshake(
     conn: &Connection,
     app_name: &str,
     app_version: &str,
@@ -163,12 +163,12 @@ pub async fn handshake(
     Ok((send, recv))
 }
 
-/// Confirm a handshake with the remote peer.
+/// Processes a handshake message and sends a response.
 ///
 /// # Errors
 ///
 /// Returns `HandshakeError` if the handshake failed.
-pub async fn handshake_with_agent(
+pub async fn server_handshake(
     bi_streams: &mut IncomingBiStreams,
     addr: SocketAddr,
     version_req: &str,
@@ -350,7 +350,7 @@ mod tests {
         let (mut server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
-            super::handshake(
+            super::client_handshake(
                 &client.conn.connection,
                 APP_NAME,
                 APP_VERSION,
@@ -360,7 +360,7 @@ mod tests {
             .await
         });
 
-        let agent_info = super::handshake_with_agent(
+        let agent_info = super::server_handshake(
             &mut server.conn.bi_streams,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             PROTOCOL_VERSION,
@@ -403,7 +403,7 @@ mod tests {
         let (mut server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
-            super::handshake(
+            super::client_handshake(
                 &client.conn.connection,
                 APP_NAME,
                 APP_VERSION,
@@ -413,7 +413,7 @@ mod tests {
             .await
         });
 
-        let res = super::handshake_with_agent(
+        let res = super::server_handshake(
             &mut server.conn.bi_streams,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             &format!("<{}", PROTOCOL_VERSION),
@@ -447,7 +447,7 @@ mod tests {
         let (mut server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
-            super::handshake(
+            super::client_handshake(
                 &client.conn.connection,
                 APP_NAME,
                 APP_VERSION,
@@ -457,7 +457,7 @@ mod tests {
             .await
         });
 
-        let res = super::handshake_with_agent(
+        let res = super::server_handshake(
             &mut server.conn.bi_streams,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             &version_req.to_string(),

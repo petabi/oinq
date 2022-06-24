@@ -7,8 +7,16 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+* `message::server_handshake` receives a handshake message and sends a response.
+* `AgentInfo` implements `Display`.
+* `AgentInfo::key` to obtain the agent's key.
+
 ### Changed
 
+* `message::handshake` is now `message::client_handshake` to differentiate
+  itself from the server handshake.
 * `HandshakeError::NewerProtocolRequired` has been replaced with
   `HandshakeError::IncompatibleProtocol`, which carries both the current version
   and the required version.
