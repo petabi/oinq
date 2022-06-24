@@ -27,10 +27,10 @@ use crate::{
 /// * `RecvError::DeserializationFailure` if the message could not be
 ///   deserialized
 /// * `RecvError::ReadError` if the message could not be read
-pub async fn recv_request_raw<'b>(
+pub async fn recv_request_raw<'b, H: Deserialize<'b>>(
     recv: &mut RecvStream,
     buf: &'b mut Vec<u8>,
-) -> Result<(RequestCode, &'b [u8]), RecvError> {
+) -> Result<(H, &'b [u8]), RecvError> {
     frame::recv_raw(recv, buf).await?;
     if buf.len() < mem::size_of::<RequestCode>() {
         return Err(RecvError::DeserializationFailure(Box::new(
@@ -228,10 +228,10 @@ pub async fn handshake_with_agent(
 ///
 /// * `SendError::SerializationFailure` if the message could not be serialized
 /// * `SendError::WriteError` if the message could not be written
-pub async fn send_request<T: Serialize>(
+pub async fn send_request<H: Serialize, T: Serialize>(
     send: &mut SendStream,
     buf: &mut Vec<u8>,
-    code: RequestCode,
+    code: H,
     body: T,
 ) -> Result<(), SendError> {
     buf.clear();
@@ -274,9 +274,9 @@ pub async fn send_forward_request<T: Serialize>(
 /// # Errors
 ///
 /// * `bincode::Error` if the message could not be serialized
-fn serialize_request<T: Serialize>(
+fn serialize_request<H: Serialize, T: Serialize>(
     mut buf: &mut Vec<u8>,
-    code: RequestCode,
+    code: H,
     body: T,
 ) -> Result<(), bincode::Error> {
     bincode::serialize_into(&mut buf, &code)?;
@@ -477,9 +477,10 @@ mod tests {
         .await
         .unwrap();
         assert!(buf.is_empty());
-        let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        let (code, body) =
+            super::recv_request_raw::<RequestCode>(&mut channel.client.recv, &mut buf)
+                .await
+                .unwrap();
         assert_eq!(code, RequestCode::ReloadTi);
         assert!(body.is_empty());
 
@@ -493,9 +494,10 @@ mod tests {
         )
         .await
         .unwrap();
-        let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        let (code, body) =
+            super::recv_request_raw::<RequestCode>(&mut channel.client.recv, &mut buf)
+                .await
+                .unwrap();
         assert_eq!(code, RequestCode::Forward);
         let (dst, msg) = bincode::DefaultOptions::new()
             .deserialize::<(String, &[u8])>(body)
