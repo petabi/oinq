@@ -1,6 +1,6 @@
 [package]
 name = "oinq"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.57"
 description = "The inter-agent communication protocol in the REview ecosystem"
