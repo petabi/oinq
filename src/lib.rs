@@ -7,7 +7,7 @@ mod test;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
 /// Numeric representation of the message types.
-#[derive(Clone, Copy, Debug, IntoPrimitive, PartialEq, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, IntoPrimitive, PartialEq)]
 #[repr(u32)]
 pub enum RequestCode {
     /// Start DNS filtering
