@@ -54,6 +54,10 @@ pub trait Handler: Send {
         Ok((gethostname().to_string_lossy().into_owned(), usage))
     }
 
+    async fn tor_exit_node_list(&mut self, _nodes: &[&str]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
+
     async fn trusted_domain_list(&mut self, _domains: &[&str]) -> Result<(), String> {
         return Err("not supported".to_string());
     }
@@ -121,6 +125,13 @@ pub async fn handle<H: Handler>(
             }
             RequestCode::ResourceUsage => {
                 send_response(send, &mut buf, handler.resource_usage().await).await?;
+            }
+            RequestCode::TorExitNodeList => {
+                let nodes = codec
+                    .deserialize::<Vec<&str>>(body)
+                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let result = handler.tor_exit_node_list(&nodes).await;
+                send_response(send, &mut buf, result).await?;
             }
             RequestCode::TrustedDomainList => {
                 let domains = codec
