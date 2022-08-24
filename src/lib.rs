@@ -31,6 +31,9 @@ pub enum RequestCode {
     /// Collect resource usage stats
     ResourceUsage = 7,
 
+    /// Update the list of tor exit nodes
+    TorExitNodeList = 8,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 
