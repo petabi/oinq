@@ -18,7 +18,7 @@ num_enum = "0.5"
 quinn = "0.8"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
-sysinfo = "0.25"
+sysinfo = "0.26"
 thiserror = "1"
 tokio = "1"
 
