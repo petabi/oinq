@@ -41,7 +41,7 @@ jobs:
     - name: Install Rust
       uses: hecrj/setup-rust-action@v1
       with:
-        rust-version: 1.57
+        rust-version: 1.59
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
