@@ -9,7 +9,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-* Requires Rust 1.59 or later.
+* Requires Rust 1.64 or later.
 
 ## [0.4.1] - 2022-08-24
 
