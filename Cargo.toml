@@ -15,7 +15,7 @@ bincode = "1"
 futures = "0.3"
 gethostname = "0.4"
 num_enum = "0.5"
-quinn = "0.8"
+quinn = "0.9"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 sysinfo = "0.26"
