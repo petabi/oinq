@@ -1,9 +1,8 @@
 //! Functions and errors for handling messages.
 
 use bincode::Options;
-use futures::StreamExt;
 use gethostname::gethostname;
-use quinn::{Connection, ConnectionError, IncomingBiStreams, RecvStream, SendStream};
+use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -169,15 +168,14 @@ pub async fn client_handshake(
 ///
 /// Returns `HandshakeError` if the handshake failed.
 pub async fn server_handshake(
-    bi_streams: &mut IncomingBiStreams,
+    conn: &Connection,
     addr: SocketAddr,
     version_req: &str,
     highest_protocol_version: &str,
 ) -> Result<AgentInfo, HandshakeError> {
-    let (mut send, mut recv) = bi_streams
-        .next()
+    let (mut send, mut recv) = conn
+        .accept_bi()
         .await
-        .ok_or(HandshakeError::ConnectionClosed)?
         .map_err(HandshakeError::ConnectionLost)?;
     let mut buf = Vec::new();
     let mut agent_info = frame::recv::<AgentInfo>(&mut recv, &mut buf)
@@ -351,7 +349,7 @@ mod tests {
 
         let handle = tokio::spawn(async move {
             super::client_handshake(
-                &client.conn.connection,
+                &client.conn,
                 APP_NAME,
                 APP_VERSION,
                 PROTOCOL_VERSION,
@@ -361,7 +359,7 @@ mod tests {
         });
 
         let agent_info = super::server_handshake(
-            &mut server.conn.bi_streams,
+            &mut server.conn,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             PROTOCOL_VERSION,
             PROTOCOL_VERSION,
@@ -404,7 +402,7 @@ mod tests {
 
         let handle = tokio::spawn(async move {
             super::client_handshake(
-                &client.conn.connection,
+                &client.conn,
                 APP_NAME,
                 APP_VERSION,
                 PROTOCOL_VERSION,
@@ -414,7 +412,7 @@ mod tests {
         });
 
         let res = super::server_handshake(
-            &mut server.conn.bi_streams,
+            &mut server.conn,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             &format!("<{}", PROTOCOL_VERSION),
             PROTOCOL_VERSION,
@@ -448,7 +446,7 @@ mod tests {
 
         let handle = tokio::spawn(async move {
             super::client_handshake(
-                &client.conn.connection,
+                &client.conn,
                 APP_NAME,
                 APP_VERSION,
                 &protocol_version.to_string(),
@@ -458,7 +456,7 @@ mod tests {
         });
 
         let res = super::server_handshake(
-            &mut server.conn.bi_streams,
+            &mut server.conn,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             &version_req.to_string(),
             &highest_version.to_string(),
