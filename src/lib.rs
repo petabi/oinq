@@ -5,6 +5,7 @@ pub mod request;
 mod test;
 
 use num_enum::{FromPrimitive, IntoPrimitive};
+pub use request::ResourceUsage;
 
 /// Numeric representation of the message types.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, IntoPrimitive, PartialEq)]
@@ -50,7 +51,7 @@ mod tests {
 
     #[test]
     fn serde() {
-        assert_eq!(7u32, RequestCode::ResourceUsage.into());
+        assert_eq!(7u32, u32::from(RequestCode::ResourceUsage));
         assert_eq!(RequestCode::ResourceUsage, RequestCode::from_primitive(7));
     }
 }

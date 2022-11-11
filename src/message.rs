@@ -487,7 +487,7 @@ mod tests {
         let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
-        assert_eq!(code, RequestCode::ReloadTi.into());
+        assert_eq!(code, u32::from(RequestCode::ReloadTi));
         assert!(body.is_empty());
 
         buf.clear();
@@ -503,7 +503,7 @@ mod tests {
         let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
-        assert_eq!(code, RequestCode::Forward.into());
+        assert_eq!(code, u32::from(RequestCode::Forward));
         let (dst, msg) = bincode::DefaultOptions::new()
             .deserialize::<(String, &[u8])>(body)
             .unwrap();

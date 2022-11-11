@@ -1,16 +1,32 @@
 //! Request handlers.
 
-use std::path::Path;
-
 use async_trait::async_trait;
 use bincode::Options;
-use gethostname::gethostname;
 use num_enum::FromPrimitive;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{frame, message, RequestCode};
+
+/// CPU, memory, and disk usage.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ResourceUsage {
+    /// The average CPU usage in percent.
+    pub cpu_usage: f32,
+
+    /// The RAM size in KB.
+    pub total_memory: u64,
+
+    /// The amount of used RAM in KB.
+    pub used_memory: u64,
+
+    /// The total disk space in bytes.
+    pub total_disk_space: u64,
+
+    /// The total disk space in bytes that is currently used.
+    pub used_disk_space: u64,
+}
 
 /// The error type for handling a request.
 #[derive(Debug, Error)]
@@ -36,6 +52,7 @@ pub trait Handler: Send {
         return Err("not supported".to_string());
     }
 
+    /// Reboots the system
     async fn reboot(&mut self) -> Result<(), String> {
         return Err("not supported".to_string());
     }
@@ -50,8 +67,7 @@ pub trait Handler: Send {
 
     /// Returns the hostname and the cpu, memory, and disk usage.
     async fn resource_usage(&mut self) -> Result<(String, ResourceUsage), String> {
-        let usage = resource_usage().await;
-        Ok((gethostname().to_string_lossy().into_owned(), usage))
+        return Err("not supported".to_string());
     }
 
     async fn tor_exit_node_list(&mut self, _nodes: &[&str]) -> Result<(), String> {
@@ -160,84 +176,6 @@ async fn send_response<T: Serialize>(
         Err(e) => message::send_err(send, buf, e).await,
     }
 }
-
-/// CPU, memory, and disk usage.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ResourceUsage {
-    /// The average CPU usage in percent.
-    pub cpu_usage: f32,
-
-    /// The RAM size in KB.
-    pub total_memory: u64,
-
-    /// The amount of used RAM in KB.
-    pub used_memory: u64,
-
-    /// The total disk space in bytes.
-    pub total_disk_space: u64,
-
-    /// The total disk space in bytes that is currently used.
-    pub used_disk_space: u64,
-}
-
-/// Sends resource usage stats to the agent.
-///
-/// # Errors
-///
-/// * `frame::SendError` if the message could not be sent
-pub async fn handle_resource_usage(
-    send: &mut SendStream,
-    buf: &mut Vec<u8>,
-) -> Result<(), frame::SendError> {
-    let usage = resource_usage().await;
-    frame::send(
-        send,
-        buf,
-        Ok((gethostname().to_string_lossy().into_owned(), usage))
-            as Result<(String, ResourceUsage), &str>,
-    )
-    .await
-}
-
-async fn resource_usage() -> ResourceUsage {
-    use sysinfo::{CpuExt, CpuRefreshKind, DiskExt, RefreshKind, System, SystemExt};
-
-    let refresh = RefreshKind::new()
-        .with_cpu(CpuRefreshKind::new().with_cpu_usage())
-        .with_disks_list()
-        .with_memory();
-    let mut system = System::new_with_specifics(refresh);
-
-    let (total_disk_space, used_disk_space) = {
-        let disks = system.disks();
-        if let Some(d) = disks
-            .iter()
-            .find(|&disk| disk.mount_point() == Path::new("/data"))
-        {
-            (d.total_space(), d.total_space() - d.available_space())
-        } else {
-            // Find the disk with the largest space if `/data` is not found
-            if let Some(d) = disks.iter().max_by_key(|&disk| disk.total_space()) {
-                (d.total_space(), d.total_space() - d.available_space())
-            } else {
-                (0, 0)
-            }
-        }
-    };
-
-    // Calculating CPU usage requires a time interval.
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    system.refresh_cpu();
-
-    ResourceUsage {
-        cpu_usage: system.global_cpu_info().cpu_usage(),
-        total_memory: system.total_memory(),
-        used_memory: system.used_memory(),
-        total_disk_space,
-        used_disk_space,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::mem::size_of;
@@ -249,8 +187,6 @@ mod tests {
         test::{channel, TOKEN},
         RequestCode,
     };
-
-    use super::ResourceUsage;
 
     #[tokio::test]
     async fn handle_forward() {
@@ -312,52 +248,5 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(buf, b"forwarded ReloadTi to agent");
-    }
-
-    #[tokio::test]
-    async fn handle_resource_usage() {
-        struct TestHandler {}
-
-        #[async_trait]
-        impl super::Handler for TestHandler {}
-
-        let mut handler = TestHandler {};
-        let _lock = TOKEN.lock().await;
-        let mut channel = channel().await;
-
-        let mut buf = Vec::new();
-        let res = message::send_request(
-            &mut channel.client.send,
-            &mut buf,
-            RequestCode::ResourceUsage,
-            (),
-        )
-        .await;
-        assert!(res.is_ok());
-        channel.client.send.finish().await.unwrap();
-
-        let res = super::handle(
-            &mut handler,
-            &mut channel.server.send,
-            &mut channel.server.recv,
-        )
-        .await;
-        assert!(res.is_ok());
-        let (_hostname, usage) =
-            frame::recv::<Result<(&str, ResourceUsage), &str>>(&mut channel.client.recv, &mut buf)
-                .await
-                .unwrap()
-                .unwrap();
-        assert!(0.0 <= usage.cpu_usage && usage.cpu_usage <= 100.0);
-        assert!(usage.used_memory <= usage.total_memory);
-        assert!(usage.used_disk_space <= usage.total_disk_space);
-    }
-
-    #[tokio::test]
-    async fn resource_usage() {
-        let usage = super::resource_usage().await;
-        assert!(0.0 <= usage.cpu_usage && usage.cpu_usage <= 100.0);
-        assert!(usage.used_memory <= usage.total_memory);
-        assert!(usage.used_disk_space <= usage.total_disk_space);
     }
 }
