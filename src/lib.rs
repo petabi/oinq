@@ -38,6 +38,9 @@ pub enum RequestCode {
     /// Update the list of sampling policies
     SamplingPolicyList = 9,
 
+    // Update traffic filter rules
+    ReloadFilterRule = 10,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 

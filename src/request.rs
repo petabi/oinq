@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use bincode::Options;
+use ipnet::IpNet;
 use num_enum::FromPrimitive;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,10 @@ pub trait Handler: Send {
 
     /// Updates the list of sampling policies.
     async fn sampling_policy_list(&mut self, _policies: &[u8]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
+
+    async fn update_traffic_filter_rules(&mut self, _rules: &[IpNet]) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 }
@@ -165,6 +170,13 @@ pub async fn handle<H: Handler>(
                 let result = handler.trusted_domain_list(&domains).await;
                 send_response(send, &mut buf, result).await?;
             }
+            RequestCode::ReloadFilterRule => {
+                let rules = codec
+                    .deserialize::<Vec<IpNet>>(body)
+                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let result = handler.update_traffic_filter_rules(&rules).await;
+                send_response(send, &mut buf, result).await?;
+            }
             RequestCode::Unknown => {
                 let err_msg = format!("unknown request code: {}", code);
                 message::send_err(send, &mut buf, err_msg).await?;
@@ -187,21 +199,21 @@ async fn send_response<T: Serialize>(
 }
 #[cfg(test)]
 mod tests {
-    use std::mem::size_of;
-
-    use async_trait::async_trait;
-
     use crate::{
         frame, message,
         test::{channel, TOKEN},
         RequestCode,
     };
+    use async_trait::async_trait;
+    use ipnet::IpNet;
+    use std::{mem::size_of, str::FromStr};
 
     #[tokio::test]
     async fn handle_forward() {
         #[derive(Default)]
         struct TestHandler {
             reboot_count: usize,
+            filter_rules: usize,
         }
 
         #[async_trait]
@@ -215,6 +227,11 @@ mod tests {
 
             async fn reboot(&mut self) -> Result<(), String> {
                 self.reboot_count += 1;
+                Ok(())
+            }
+
+            async fn update_traffic_filter_rules(&mut self, rules: &[IpNet]) -> Result<(), String> {
+                self.filter_rules = rules.len();
                 Ok(())
             }
         }
@@ -238,9 +255,23 @@ mod tests {
         )
         .await;
         assert!(res.is_ok());
+        let rules = vec![
+            IpNet::from_str("192.168.1.0/24").unwrap(),
+            IpNet::from_str("10.80.10.10/32").unwrap(),
+        ];
+        let mut buf = Vec::new();
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::ReloadFilterRule,
+            rules.clone(),
+        )
+        .await;
+        assert!(res.is_ok());
         channel.client.send.finish().await.unwrap();
 
         assert_eq!(handler.reboot_count, 0);
+        assert_eq!(handler.filter_rules, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -249,6 +280,7 @@ mod tests {
         .await;
         assert!(res.is_ok());
         assert_eq!(handler.reboot_count, 1);
+        assert_eq!(handler.filter_rules, 2);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await
