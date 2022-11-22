@@ -10,6 +10,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 * Add `RequestCode::SamplingPolicyList` for updating sampling policies.
+* Add `RequestCode::ReloadFilterRule` for updating traffic filtering rules of piglet.
 
 ### Removed
 
