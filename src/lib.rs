@@ -35,6 +35,9 @@ pub enum RequestCode {
     /// Update the list of tor exit nodes
     TorExitNodeList = 8,
 
+    /// Update the list of sampling policies
+    SamplingPolicyList = 9,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 

@@ -77,6 +77,11 @@ pub trait Handler: Send {
     async fn trusted_domain_list(&mut self, _domains: &[&str]) -> Result<(), String> {
         return Err("not supported".to_string());
     }
+
+    /// Updates the list of sampling policies.
+    async fn sampling_policy_list(&mut self, _policies: &[u8]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
 }
 
 /// Handles requests to an agent.
@@ -147,6 +152,10 @@ pub async fn handle<H: Handler>(
                     .deserialize::<Vec<&str>>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
                 let result = handler.tor_exit_node_list(&nodes).await;
+                send_response(send, &mut buf, result).await?;
+            }
+            RequestCode::SamplingPolicyList => {
+                let result = handler.sampling_policy_list(body).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::TrustedDomainList => {

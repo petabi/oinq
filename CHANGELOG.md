@@ -7,6 +7,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+* Add `RequestCode::SamplingPolicyList` for updating sampling policies.
+
 ### Removed
 
 * `ResourceUsage` and functions related with getting resource usage.
