@@ -165,9 +165,14 @@ pub async fn handle<H: Handler>(
             }
             RequestCode::TrustedDomainList => {
                 let domains = codec
-                    .deserialize::<Vec<&str>>(body)
+                    .deserialize::<Result<Vec<&str>, String>>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
-                let result = handler.trusted_domain_list(&domains).await;
+
+                let result = if let Ok(domains) = domains {
+                    handler.trusted_domain_list(&domains).await
+                } else {
+                    Err("invalid request".to_string())
+                };
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::ReloadFilterRule => {
@@ -214,6 +219,7 @@ mod tests {
         struct TestHandler {
             reboot_count: usize,
             filter_rules: usize,
+            trusted_domains: usize,
         }
 
         #[async_trait]
@@ -234,10 +240,14 @@ mod tests {
                 self.filter_rules = rules.len();
                 Ok(())
             }
+
+            async fn trusted_domain_list(&mut self, domains: &[&str]) -> Result<(), String> {
+                self.trusted_domains = domains.len();
+                Ok(())
+            }
         }
 
         let mut handler = TestHandler::default();
-
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -264,14 +274,28 @@ mod tests {
             &mut channel.client.send,
             &mut buf,
             RequestCode::ReloadFilterRule,
-            rules.clone(),
+            rules,
         )
         .await;
         assert!(res.is_ok());
+
+        let trusted_domains: Result<Vec<String>, String> =
+            Ok(vec![".google.com".to_string(), ".gstatic.com".to_string()]);
+        let mut buf = Vec::new();
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::TrustedDomainList,
+            trusted_domains,
+        )
+        .await;
+        assert!(res.is_ok());
+
         channel.client.send.finish().await.unwrap();
 
         assert_eq!(handler.reboot_count, 0);
         assert_eq!(handler.filter_rules, 0);
+        assert_eq!(handler.trusted_domains, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -281,6 +305,7 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(handler.reboot_count, 1);
         assert_eq!(handler.filter_rules, 2);
+        assert_eq!(handler.trusted_domains, 2);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await
