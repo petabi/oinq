@@ -321,7 +321,7 @@ pub async fn send_err<E: fmt::Display>(
     buf: &mut Vec<u8>,
     e: E,
 ) -> Result<(), SendError> {
-    frame::send(send, buf, Err(format!("{:#}", e)) as Result<(), String>).await?;
+    frame::send(send, buf, Err(format!("{e:#}")) as Result<(), String>).await?;
     Ok(())
 }
 
@@ -414,7 +414,7 @@ mod tests {
         let res = super::server_handshake(
             &mut server.conn,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-            &format!("<{}", PROTOCOL_VERSION),
+            &format!("<{PROTOCOL_VERSION}"),
             PROTOCOL_VERSION,
         )
         .await;
@@ -434,7 +434,7 @@ mod tests {
         const PROTOCOL_VERSION: &str = env!("CARGO_PKG_VERSION");
         const AGENT_ID: &str = "test";
 
-        let version_req = semver::VersionReq::parse(&format!(">={}", PROTOCOL_VERSION)).unwrap();
+        let version_req = semver::VersionReq::parse(&format!(">={PROTOCOL_VERSION}")).unwrap();
         let mut highest_version = semver::Version::parse(PROTOCOL_VERSION).unwrap();
         highest_version.patch += 1;
         let mut protocol_version = highest_version.clone();

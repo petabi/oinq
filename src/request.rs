@@ -131,7 +131,7 @@ pub async fn handle<H: Handler>(
                         frame::send_raw(send, &response).await?;
                     }
                     Err(e) => {
-                        let err_msg = format!("failed to forward message to {}: {}", target, e);
+                        let err_msg = format!("failed to forward message to {target}: {e}");
                         message::send_err(send, &mut buf, err_msg).await?;
                     }
                 }
@@ -183,7 +183,7 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::Unknown => {
-                let err_msg = format!("unknown request code: {}", code);
+                let err_msg = format!("unknown request code: {code}");
                 message::send_err(send, &mut buf, err_msg).await?;
             }
         }
@@ -227,7 +227,7 @@ mod tests {
             async fn forward(&mut self, target: &str, msg: &[u8]) -> Result<Vec<u8>, String> {
                 let code = u32::from_le_bytes(msg[..size_of::<u32>()].try_into().unwrap());
                 let req = RequestCode::from(code);
-                let response = format!("forwarded {:?} to {}", req, target);
+                let response = format!("forwarded {req:?} to {target}");
                 Ok(response.as_bytes().to_vec())
             }
 
