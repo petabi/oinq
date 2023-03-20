@@ -7,6 +7,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+* Add `RequestCode::GetConfig` for get config toml file.
+* Add `RequestCode::SetConfig` for set config toml file.
+
 ### Fixed
 
 * Fix the trusted_domain_list update failure.

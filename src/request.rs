@@ -6,6 +6,7 @@ use ipnet::IpNet;
 use num_enum::FromPrimitive;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use thiserror::Error;
 
 use crate::{frame, message, RequestCode};
@@ -27,6 +28,13 @@ pub struct ResourceUsage {
 
     /// The total disk space in bytes that is currently used.
     pub used_disk_space: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Configuration {
+    pub hog_sources: Option<Vec<String>>,
+    pub hog_protocols: Option<Vec<String>>,
+    pub publish_address: Option<SocketAddr>,
 }
 
 /// The error type for handling a request.
@@ -85,6 +93,14 @@ pub trait Handler: Send {
     }
 
     async fn update_traffic_filter_rules(&mut self, _rules: &[IpNet]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
+
+    async fn get_config(&mut self) -> Result<Configuration, String> {
+        return Err("not supported".to_string());
+    }
+
+    async fn set_config(&mut self, _config: Configuration) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 }
@@ -180,6 +196,16 @@ pub async fn handle<H: Handler>(
                     .deserialize::<Vec<IpNet>>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
                 let result = handler.update_traffic_filter_rules(&rules).await;
+                send_response(send, &mut buf, result).await?;
+            }
+            RequestCode::GetConfig => {
+                send_response(send, &mut buf, handler.get_config().await).await?;
+            }
+            RequestCode::SetConfig => {
+                let conf = codec
+                    .deserialize::<Configuration>(body)
+                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let result = handler.set_config(conf).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::Unknown => {
