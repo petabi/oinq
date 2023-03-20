@@ -5,7 +5,7 @@ pub mod request;
 mod test;
 
 use num_enum::{FromPrimitive, IntoPrimitive};
-pub use request::ResourceUsage;
+pub use request::{Configuration, ResourceUsage};
 
 /// Numeric representation of the message types.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, IntoPrimitive, PartialEq)]
@@ -38,8 +38,14 @@ pub enum RequestCode {
     /// Update the list of sampling policies
     SamplingPolicyList = 9,
 
-    // Update traffic filter rules
+    /// Update traffic filter rules
     ReloadFilterRule = 10,
+
+    /// Get configuration
+    GetConfig = 11,
+
+    /// Set Configuration
+    SetConfig = 12,
 
     /// Update the list of trusted domains
     TrustedDomainList = 0,
