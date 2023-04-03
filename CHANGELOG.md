@@ -11,6 +11,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 * Add `RequestCode::GetConfig` for get config toml file.
 * Add `RequestCode::SetConfig` for set config toml file.
+* Add more fields to `Configuration`.
 
 ### Fixed
 
