@@ -36,6 +36,7 @@ pub struct Configuration {
     pub hog_protocols: Option<Vec<String>>,
     pub publish_address: Option<SocketAddr>,
     pub ingest_address: Option<SocketAddr>,
+    pub giganto_name: Option<String>,
     pub dump_file: Option<String>,
     pub dump_size: Option<usize>,
     pub log_options: Option<Vec<String>>,
