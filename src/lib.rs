@@ -47,6 +47,9 @@ pub enum RequestCode {
     /// Set Configuration
     SetConfig = 12,
 
+    /// Delete the list of sampling policies
+    DeleteSamplingPolicy = 13,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 

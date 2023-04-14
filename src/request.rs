@@ -108,6 +108,10 @@ pub trait Handler: Send {
     async fn set_config(&mut self, _config: Configuration) -> Result<(), String> {
         return Err("not supported".to_string());
     }
+
+    async fn delete_sampling_policy(&mut self, _policies_id: &[u8]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
 }
 
 /// Handles requests to an agent.
@@ -116,6 +120,7 @@ pub trait Handler: Send {
 ///
 /// * `HandlerError::RecvError` if the request could not be received
 /// * `HandlerError::SendError` if the response could not be sent
+#[allow(clippy::too_many_lines)]
 pub async fn handle<H: Handler>(
     handler: &mut H,
     send: &mut SendStream,
@@ -182,6 +187,10 @@ pub async fn handle<H: Handler>(
             }
             RequestCode::SamplingPolicyList => {
                 let result = handler.sampling_policy_list(body).await;
+                send_response(send, &mut buf, result).await?;
+            }
+            RequestCode::DeleteSamplingPolicy => {
+                let result = handler.delete_sampling_policy(body).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::TrustedDomainList => {
