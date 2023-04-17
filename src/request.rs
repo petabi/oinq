@@ -112,6 +112,10 @@ pub trait Handler: Send {
     async fn delete_sampling_policy(&mut self, _policies_id: &[u8]) -> Result<(), String> {
         return Err("not supported".to_string());
     }
+
+    async fn internal_network_list(&mut self, _nodes: &[&str]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
 }
 
 /// Handles requests to an agent.
@@ -205,6 +209,13 @@ pub async fn handle<H: Handler>(
                 };
                 send_response(send, &mut buf, result).await?;
             }
+            RequestCode::InternalNetworkList => {
+                let network_list = codec
+                    .deserialize::<Vec<&str>>(body)
+                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let result = handler.internal_network_list(&network_list).await;
+                send_response(send, &mut buf, result).await?;
+            }
             RequestCode::ReloadFilterRule => {
                 let rules = codec
                     .deserialize::<Vec<IpNet>>(body)
@@ -260,6 +271,7 @@ mod tests {
             reboot_count: usize,
             filter_rules: usize,
             trusted_domains: usize,
+            internal_network_list: usize,
         }
 
         #[async_trait]
@@ -283,6 +295,11 @@ mod tests {
 
             async fn trusted_domain_list(&mut self, domains: &[&str]) -> Result<(), String> {
                 self.trusted_domains = domains.len();
+                Ok(())
+            }
+
+            async fn internal_network_list(&mut self, network_list: &[&str]) -> Result<(), String> {
+                self.internal_network_list = network_list.len();
                 Ok(())
             }
         }
@@ -331,11 +348,27 @@ mod tests {
         .await;
         assert!(res.is_ok());
 
+        let network_list: Vec<String> = vec![
+            "10.0.1.1/24".to_string(),
+            "10.0.3.1/28".to_string(),
+            "10.0.5.1/21".to_string(),
+        ];
+        let mut buf = Vec::new();
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::InternalNetworkList,
+            network_list,
+        )
+        .await;
+        assert!(res.is_ok());
+
         channel.client.send.finish().await.unwrap();
 
         assert_eq!(handler.reboot_count, 0);
         assert_eq!(handler.filter_rules, 0);
         assert_eq!(handler.trusted_domains, 0);
+        assert_eq!(handler.internal_network_list, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -346,6 +379,7 @@ mod tests {
         assert_eq!(handler.reboot_count, 1);
         assert_eq!(handler.filter_rules, 2);
         assert_eq!(handler.trusted_domains, 2);
+        assert_eq!(handler.internal_network_list, 3);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await

@@ -50,6 +50,9 @@ pub enum RequestCode {
     /// Delete the list of sampling policies
     DeleteSamplingPolicy = 13,
 
+    /// Update the list of Internal network
+    InternalNetworkList = 14,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 
