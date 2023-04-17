@@ -5,15 +5,15 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.1] - 2023-04-17
 
 ### Added
 
-* Add `RequestCode::GetConfig` for get config toml file.
-* Add `RequestCode::SetConfig` for set config toml file.
-* Add more fields to `Configuration`.
-* Add `RequestCode::DeleteSamplingPolicy`
-* Add `RequestCode::InternalNetworkList`
+* `RequestCode::GetConfig` to get config toml file
+* `RequestCode::SetConfig` to set config toml file
+* More fields to `Configuration`
+* `RequestCode::DeleteSamplingPolicy`
+* `RequestCode::InternalNetworkList`
 
 ### Fixed
 
@@ -152,6 +152,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 * `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[0.6.1]: https://github.com/petabi/oinq/compare/0.6.0...0.6.1
 [0.6.0]: https://github.com/petabi/oinq/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/petabi/oinq/compare/0.4.1...0.5.0
 [0.4.1]: https://github.com/petabi/oinq/compare/0.4.0...0.4.1
