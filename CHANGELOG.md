@@ -12,6 +12,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 * Upgrade minimum supported Rust version (MSRV) to 1.65.
 * Upgrade rustls to 0.21.
 * Upgrade quinn to 0.10.
+* Remove `agent_id` and `host_id` fields from `AgentInfo` and `client_handshake`,
+  as they are no longer passed to server manually. It's required that the server
+  retrieve "{agent_id}@{host_id}" from Common Name (CN) of certificate used by the
+  client.
 
 ## [0.6.1] - 2023-04-17
 

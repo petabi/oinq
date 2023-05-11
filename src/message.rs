@@ -1,7 +1,6 @@
 //! Functions and errors for handling messages.
 
 use bincode::Options;
-use gethostname::gethostname;
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -77,25 +76,12 @@ pub struct AgentInfo {
     pub app_name: String,
     pub version: String,
     pub protocol_version: String,
-    pub host_id: String,  // An identifier of the host where the agent is running
-    pub agent_id: String, // This must be unique on the host.
     pub addr: SocketAddr,
 }
 
 impl std::fmt::Display for AgentInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}, {}@{}, {}",
-            self.app_name, self.agent_id, self.host_id, self.addr
-        )
-    }
-}
-
-impl AgentInfo {
-    #[must_use]
-    pub fn key(&self) -> String {
-        format!("{}@{}", self.agent_id, self.host_id)
+        write!(f, "{}, {}", self.app_name, self.addr)
     }
 }
 
@@ -109,7 +95,6 @@ pub async fn client_handshake(
     app_name: &str,
     app_version: &str,
     protocol_version: &str,
-    agent_id: &str,
 ) -> Result<(SendStream, RecvStream), HandshakeError> {
     // A placeholder for the address of this agent. Will be replaced by the
     // server.
@@ -126,8 +111,6 @@ pub async fn client_handshake(
         app_name: app_name.to_string(),
         version: app_version.to_string(),
         protocol_version: protocol_version.to_string(),
-        host_id: gethostname().to_string_lossy().into_owned(),
-        agent_id: agent_id.to_string(),
         addr,
     };
 
@@ -341,21 +324,13 @@ mod tests {
         const APP_NAME: &str = "oinq";
         const APP_VERSION: &str = "1.0.0";
         const PROTOCOL_VERSION: &str = env!("CARGO_PKG_VERSION");
-        const AGENT_ID: &str = "test";
 
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let (mut server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
-            super::client_handshake(
-                &client.conn,
-                APP_NAME,
-                APP_VERSION,
-                PROTOCOL_VERSION,
-                AGENT_ID,
-            )
-            .await
+            super::client_handshake(&client.conn, APP_NAME, APP_VERSION, PROTOCOL_VERSION).await
         });
 
         let agent_info = super::server_handshake(
@@ -370,18 +345,10 @@ mod tests {
         assert_eq!(agent_info.app_name, APP_NAME);
         assert_eq!(agent_info.version, APP_VERSION);
         assert_eq!(agent_info.protocol_version, PROTOCOL_VERSION);
-        assert_eq!(agent_info.agent_id, AGENT_ID);
 
         assert_eq!(
-            agent_info.key(),
-            format!("{}@{}", agent_info.agent_id, agent_info.host_id)
-        );
-        assert_eq!(
             agent_info.to_string(),
-            format!(
-                "{}, {}@{}, {}",
-                agent_info.app_name, agent_info.agent_id, agent_info.host_id, agent_info.addr
-            )
+            format!("{}, {}", agent_info.app_name, agent_info.addr)
         );
         let res = tokio::join!(handle).0.unwrap();
         assert!(res.is_ok());
@@ -394,21 +361,13 @@ mod tests {
         const APP_NAME: &str = "oinq";
         const APP_VERSION: &str = "1.0.0";
         const PROTOCOL_VERSION: &str = env!("CARGO_PKG_VERSION");
-        const AGENT_ID: &str = "test";
 
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let (mut server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
-            super::client_handshake(
-                &client.conn,
-                APP_NAME,
-                APP_VERSION,
-                PROTOCOL_VERSION,
-                AGENT_ID,
-            )
-            .await
+            super::client_handshake(&client.conn, APP_NAME, APP_VERSION, PROTOCOL_VERSION).await
         });
 
         let res = super::server_handshake(
@@ -450,7 +409,6 @@ mod tests {
                 APP_NAME,
                 APP_VERSION,
                 &protocol_version.to_string(),
-                AGENT_ID,
             )
             .await
         });
