@@ -53,6 +53,12 @@ pub enum RequestCode {
     /// Update the list of Internal network
     InternalNetworkList = 14,
 
+    /// Update the list of allow
+    AllowList = 15,
+
+    /// Update the list of block
+    BlockList = 16,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 
