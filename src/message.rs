@@ -391,7 +391,6 @@ mod tests {
         const APP_NAME: &str = "oinq";
         const APP_VERSION: &str = "1.0.0";
         const PROTOCOL_VERSION: &str = env!("CARGO_PKG_VERSION");
-        const AGENT_ID: &str = "test";
 
         let version_req = semver::VersionReq::parse(&format!(">={PROTOCOL_VERSION}")).unwrap();
         let mut highest_version = semver::Version::parse(PROTOCOL_VERSION).unwrap();
