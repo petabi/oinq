@@ -9,8 +9,18 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-* `RequestCode::AllowList` and `RequestCode::BlockList` for updating
-   allow/block list.
+- Introduced two new request codes: `RequestCode::AllowList` and
+  `RequestCode::BlockList`.
+  - `RequestCode::AllowList`: This new request code facilitates REview to
+    transmit the allow list to an agent. This request code is followed by a
+    list of IP prefixes (represented as `Vec<String>`), which specifies the IP
+    ranges allowed to communicate.
+  - `RequestCode::BlockList`: This new request code enables REview to send the
+    block list to an agent. This request code also follows a `Vec<String>`
+    parameter which carries a list of IP prefixes that are to be blocked from
+    communication.
+
+  Each of these IP prefixes are in the format of "10.20.81.1/24".
 
 ## [0.7.0] - 2023-05-11
 
@@ -171,6 +181,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 * `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[Unreleased]: https://github.com/petabi/oinq/compare/0.7.0...main
 [0.7.0]: https://github.com/petabi/oinq/compare/0.6.1...0.7.0
 [0.6.1]: https://github.com/petabi/oinq/compare/0.6.0...0.6.1
 [0.6.0]: https://github.com/petabi/oinq/compare/0.5.0...0.6.0
