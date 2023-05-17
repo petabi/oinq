@@ -327,14 +327,14 @@ mod tests {
 
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
-        let (mut server, client) = (channel.server, channel.client);
+        let (server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
             super::client_handshake(&client.conn, APP_NAME, APP_VERSION, PROTOCOL_VERSION).await
         });
 
         let agent_info = super::server_handshake(
-            &mut server.conn,
+            &server.conn,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             PROTOCOL_VERSION,
             PROTOCOL_VERSION,
@@ -364,14 +364,14 @@ mod tests {
 
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
-        let (mut server, client) = (channel.server, channel.client);
+        let (server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
             super::client_handshake(&client.conn, APP_NAME, APP_VERSION, PROTOCOL_VERSION).await
         });
 
         let res = super::server_handshake(
-            &mut server.conn,
+            &server.conn,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             &format!("<{PROTOCOL_VERSION}"),
             PROTOCOL_VERSION,
@@ -400,7 +400,7 @@ mod tests {
 
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
-        let (mut server, client) = (channel.server, channel.client);
+        let (server, client) = (channel.server, channel.client);
 
         let handle = tokio::spawn(async move {
             super::client_handshake(
@@ -413,7 +413,7 @@ mod tests {
         });
 
         let res = super::server_handshake(
-            &mut server.conn,
+            &server.conn,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             &version_req.to_string(),
             &highest_version.to_string(),
