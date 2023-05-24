@@ -6,7 +6,10 @@ use ipnet::IpNet;
 use num_enum::FromPrimitive;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use std::{
+    net::{IpAddr, SocketAddr},
+    ops::RangeInclusive,
+};
 use thiserror::Error;
 
 use crate::{frame, message, RequestCode};
@@ -40,6 +43,13 @@ pub struct Configuration {
     pub dump_file: Option<String>,
     pub dump_size: Option<usize>,
     pub log_options: Option<Vec<String>>,
+}
+
+#[derive(Clone, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct HostNetworkGroup {
+    pub hosts: Vec<IpAddr>,
+    pub networks: Vec<IpNet>,
+    pub ip_ranges: Vec<RangeInclusive<IpAddr>>,
 }
 
 /// The error type for handling a request.
@@ -113,15 +123,15 @@ pub trait Handler: Send {
         return Err("not supported".to_string());
     }
 
-    async fn internal_network_list(&mut self, _list: &[&str]) -> Result<(), String> {
+    async fn internal_network_list(&mut self, _list: HostNetworkGroup) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 
-    async fn allow_list(&mut self, _list: &[&str]) -> Result<(), String> {
+    async fn allow_list(&mut self, _list: HostNetworkGroup) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 
-    async fn block_list(&mut self, _list: &[&str]) -> Result<(), String> {
+    async fn block_list(&mut self, _list: HostNetworkGroup) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 }
@@ -219,23 +229,23 @@ pub async fn handle<H: Handler>(
             }
             RequestCode::InternalNetworkList => {
                 let network_list = codec
-                    .deserialize::<Vec<&str>>(body)
+                    .deserialize::<HostNetworkGroup>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
-                let result = handler.internal_network_list(&network_list).await;
+                let result = handler.internal_network_list(network_list).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::AllowList => {
                 let allow_list = codec
-                    .deserialize::<Vec<&str>>(body)
+                    .deserialize::<HostNetworkGroup>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
-                let result = handler.allow_list(&allow_list).await;
+                let result = handler.allow_list(allow_list).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::BlockList => {
                 let block_list = codec
-                    .deserialize::<Vec<&str>>(body)
+                    .deserialize::<HostNetworkGroup>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
-                let result = handler.block_list(&block_list).await;
+                let result = handler.block_list(block_list).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::ReloadFilterRule => {
@@ -279,12 +289,18 @@ async fn send_response<T: Serialize>(
 mod tests {
     use crate::{
         frame, message,
+        request::HostNetworkGroup,
         test::{channel, TOKEN},
         RequestCode,
     };
     use async_trait::async_trait;
     use ipnet::IpNet;
-    use std::{mem::size_of, str::FromStr};
+    use std::{
+        mem::size_of,
+        net::{IpAddr, Ipv4Addr},
+        ops::RangeInclusive,
+        str::FromStr,
+    };
 
     #[tokio::test]
     async fn handle_forward() {
@@ -322,16 +338,19 @@ mod tests {
                 Ok(())
             }
 
-            async fn internal_network_list(&mut self, network_list: &[&str]) -> Result<(), String> {
-                self.internal_network_list = network_list.len();
+            async fn internal_network_list(
+                &mut self,
+                network_list: HostNetworkGroup,
+            ) -> Result<(), String> {
+                self.internal_network_list = network_list.hosts.len();
                 Ok(())
             }
-            async fn allow_list(&mut self, allow_list: &[&str]) -> Result<(), String> {
-                self.allow_list = allow_list.len();
+            async fn allow_list(&mut self, allow_list: HostNetworkGroup) -> Result<(), String> {
+                self.allow_list = allow_list.networks.len();
                 Ok(())
             }
-            async fn block_list(&mut self, block_list: &[&str]) -> Result<(), String> {
-                self.block_list = block_list.len();
+            async fn block_list(&mut self, block_list: HostNetworkGroup) -> Result<(), String> {
+                self.block_list = block_list.ip_ranges.len();
                 Ok(())
             }
         }
@@ -380,53 +399,59 @@ mod tests {
         .await;
         assert!(res.is_ok());
 
-        let network_list: Vec<String> = vec![
-            "10.0.1.1/24".to_string(),
-            "10.0.3.1/28".to_string(),
-            "10.0.5.1/21".to_string(),
-        ];
-        let mut buf = Vec::new();
+        let input_internal_list = HostNetworkGroup {
+            hosts: vec![
+                IpAddr::V4(Ipv4Addr::new(10, 0, 9, 1)),
+                IpAddr::V4(Ipv4Addr::new(10, 0, 9, 2)),
+                IpAddr::V4(Ipv4Addr::new(10, 0, 9, 3)),
+            ],
+            networks: Vec::new(),
+            ip_ranges: Vec::new(),
+        };
+
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
             RequestCode::InternalNetworkList,
-            network_list,
+            input_internal_list,
         )
         .await;
         assert!(res.is_ok());
 
-        let allow_list: Vec<String> = vec![
-            "100.200.1.1/24".to_string(),
-            "100.200.3.1/28".to_string(),
-            "100.200.5.1/21".to_string(),
-            "100.200.7.1/23".to_string(),
-            "100.200.9.1/25".to_string(),
-        ];
+        let input_allow_list = HostNetworkGroup {
+            hosts: Vec::new(),
+            networks: vec![
+                IpNet::from_str("192.168.1.0/24").unwrap(),
+                IpNet::from_str("10.80.10.10/32").unwrap(),
+            ],
+            ip_ranges: Vec::new(),
+        };
+
         let mut buf = Vec::new();
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
             RequestCode::AllowList,
-            allow_list,
+            input_allow_list,
         )
         .await;
         assert!(res.is_ok());
 
-        let block_list: Vec<String> = vec![
-            "50.30.1.1/24".to_string(),
-            "50.30.3.1/28".to_string(),
-            "50.30.5.1/23".to_string(),
-            "50.30.6.1/22".to_string(),
-            "50.30.7.1/25".to_string(),
-            "50.30.8.1/27".to_string(),
-            "50.30.9.1/21".to_string(),
-        ];
+        let input_block_list = HostNetworkGroup {
+            hosts: Vec::new(),
+            networks: Vec::new(),
+            ip_ranges: vec![RangeInclusive::new(
+                IpAddr::V4(Ipv4Addr::new(10, 80, 10, 10)),
+                IpAddr::V4(Ipv4Addr::new(10, 80, 10, 20)),
+            )],
+        };
+
         let mut buf = Vec::new();
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
             RequestCode::BlockList,
-            block_list,
+            input_block_list,
         )
         .await;
         assert!(res.is_ok());
@@ -450,8 +475,8 @@ mod tests {
         assert_eq!(handler.filter_rules, 2);
         assert_eq!(handler.trusted_domains, 2);
         assert_eq!(handler.internal_network_list, 3);
-        assert_eq!(handler.allow_list, 5);
-        assert_eq!(handler.block_list, 7);
+        assert_eq!(handler.allow_list, 2);
+        assert_eq!(handler.block_list, 1);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await
