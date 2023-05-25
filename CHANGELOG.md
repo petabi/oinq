@@ -5,12 +5,22 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2023-05-24
 
 ### Changed
 
-- Change the transfer data type of `RequestCode:InternalNetworkList`/
-  `RequestCode:AllowList`/`RequestCodeBlockList` to `HostNetworkGroup`.
+- The transfer data types of the following request codes have been changed:
+
+  - `RequestCode:InternalNetworkList`
+  - `RequestCode:AllowList`
+  - `RequestCode:BlockList`
+
+  Prior to this update, these request codes were using a string array to
+  transfer data. This approach has been replaced by the `HostNetworkGroup` data
+  type.
+
+  This change is backwards incompatible. Users are encouraged to update their
+  request handling to accommodate the `HostNetworkGroup` data type.
 
 ## [0.7.1] - 2023-05-17
 
@@ -188,6 +198,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[0.8.0]: https://github.com/petabi/oinq/compare/0.7.1...0.8.0
 [0.7.1]: https://github.com/petabi/oinq/compare/0.7.0...0.7.1
 [0.7.0]: https://github.com/petabi/oinq/compare/0.6.1...0.7.0
 [0.6.1]: https://github.com/petabi/oinq/compare/0.6.0...0.6.1
