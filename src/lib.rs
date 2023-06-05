@@ -59,6 +59,9 @@ pub enum RequestCode {
     /// Update the list of block
     BlockList = 16,
 
+    /// Request Echo (for ping)
+    EchoRequest = 17,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 
