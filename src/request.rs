@@ -134,6 +134,10 @@ pub trait Handler: Send {
     async fn block_list(&mut self, _list: HostNetworkGroup) -> Result<(), String> {
         return Err("not supported".to_string());
     }
+    // This feature is supported for all daemons that use oinq.
+    async fn echo_request(&mut self) -> Result<(), String> {
+        return Ok(());
+    }
 }
 
 /// Handles requests to an agent.
@@ -248,6 +252,9 @@ pub async fn handle<H: Handler>(
                 let result = handler.block_list(block_list).await;
                 send_response(send, &mut buf, result).await?;
             }
+            RequestCode::EchoRequest => {
+                send_response(send, &mut buf, handler.echo_request().await).await?;
+            }
             RequestCode::ReloadFilterRule => {
                 let rules = codec
                     .deserialize::<Vec<IpNet>>(body)
@@ -312,6 +319,7 @@ mod tests {
             internal_network_list: usize,
             allow_list: usize,
             block_list: usize,
+            echo_request_count: usize,
         }
 
         #[async_trait]
@@ -345,12 +353,19 @@ mod tests {
                 self.internal_network_list = network_list.hosts.len();
                 Ok(())
             }
+
             async fn allow_list(&mut self, allow_list: HostNetworkGroup) -> Result<(), String> {
                 self.allow_list = allow_list.networks.len();
                 Ok(())
             }
+
             async fn block_list(&mut self, block_list: HostNetworkGroup) -> Result<(), String> {
                 self.block_list = block_list.ip_ranges.len();
+                Ok(())
+            }
+
+            async fn echo_request(&mut self) -> Result<(), String> {
+                self.echo_request_count += 1;
                 Ok(())
             }
         }
@@ -456,6 +471,15 @@ mod tests {
         .await;
         assert!(res.is_ok());
 
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::EchoRequest,
+            (),
+        )
+        .await;
+        assert!(res.is_ok());
+
         channel.client.send.finish().await.unwrap();
 
         assert_eq!(handler.reboot_count, 0);
@@ -464,6 +488,7 @@ mod tests {
         assert_eq!(handler.internal_network_list, 0);
         assert_eq!(handler.allow_list, 0);
         assert_eq!(handler.block_list, 0);
+        assert_eq!(handler.echo_request_count, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -477,6 +502,7 @@ mod tests {
         assert_eq!(handler.internal_network_list, 3);
         assert_eq!(handler.allow_list, 2);
         assert_eq!(handler.block_list, 1);
+        assert_eq!(handler.echo_request_count, 1);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await
