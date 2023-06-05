@@ -5,14 +5,16 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.1] - 2023-06-05
 
-### Changed
+### Added
 
-- Introduce new request  code: `RequestCode:EchoRequest`
-  - `RequestCode::AllowList`: This new request code is for ping testing.
-    When you make a request to a damon connected with `RequestCode::EchoRequest`,
-    the receiving daemon respones with an empty tuple.
+- New Request Code: `RequestCode:EchoRequest`. This addition to the request
+code library is designed specifically for network latency testing, also
+commonly referred to as ping testing. When a request is made to a daemon using
+the `RequestCode::EchoRequest`, the daemon will respond with an empty tuple.
+This allows users to measure round trip time between the client and the server
+without relying on the content of the response.
 
 ## [0.8.0] - 2023-05-24
 
@@ -207,6 +209,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[0.8.1]: https://github.com/petabi/oinq/compare/0.8.0...0.8.1
 [0.8.0]: https://github.com/petabi/oinq/compare/0.7.1...0.8.0
 [0.7.1]: https://github.com/petabi/oinq/compare/0.7.0...0.7.1
 [0.7.0]: https://github.com/petabi/oinq/compare/0.6.1...0.7.0
