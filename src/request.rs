@@ -134,9 +134,14 @@ pub trait Handler: Send {
     async fn block_list(&mut self, _list: HostNetworkGroup) -> Result<(), String> {
         return Err("not supported".to_string());
     }
+
     // This feature is supported for all daemons that use oinq.
     async fn echo_request(&mut self) -> Result<(), String> {
         return Ok(());
+    }
+
+    async fn trusted_user_agent_list(&mut self, _list: &[&str]) -> Result<(), String> {
+        return Err("not supported".to_string());
     }
 }
 
@@ -255,6 +260,13 @@ pub async fn handle<H: Handler>(
             RequestCode::EchoRequest => {
                 send_response(send, &mut buf, handler.echo_request().await).await?;
             }
+            RequestCode::TrustedUserAgentList => {
+                let user_agent_list = codec
+                    .deserialize::<Vec<&str>>(body)
+                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let result = handler.trusted_user_agent_list(&user_agent_list).await;
+                send_response(send, &mut buf, result).await?;
+            }
             RequestCode::ReloadFilterRule => {
                 let rules = codec
                     .deserialize::<Vec<IpNet>>(body)
@@ -320,6 +332,7 @@ mod tests {
             allow_list: usize,
             block_list: usize,
             echo_request_count: usize,
+            trusted_user_agents: usize,
         }
 
         #[async_trait]
@@ -366,6 +379,11 @@ mod tests {
 
             async fn echo_request(&mut self) -> Result<(), String> {
                 self.echo_request_count += 1;
+                Ok(())
+            }
+
+            async fn trusted_user_agent_list(&mut self, list: &[&str]) -> Result<(), String> {
+                self.trusted_user_agents = list.len();
                 Ok(())
             }
         }
@@ -480,6 +498,26 @@ mod tests {
         .await;
         assert!(res.is_ok());
 
+        let trusted_user_agent_list: Vec<String> = vec![
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
+                .to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/113."
+                .to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.35"
+                .to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.42"
+                .to_string(),
+        ];
+        let mut buf = Vec::new();
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::TrustedUserAgentList,
+            trusted_user_agent_list,
+        )
+        .await;
+        assert!(res.is_ok());
+
         channel.client.send.finish().await.unwrap();
 
         assert_eq!(handler.reboot_count, 0);
@@ -489,6 +527,7 @@ mod tests {
         assert_eq!(handler.allow_list, 0);
         assert_eq!(handler.block_list, 0);
         assert_eq!(handler.echo_request_count, 0);
+        assert_eq!(handler.trusted_user_agents, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -503,6 +542,7 @@ mod tests {
         assert_eq!(handler.allow_list, 2);
         assert_eq!(handler.block_list, 1);
         assert_eq!(handler.echo_request_count, 1);
+        assert_eq!(handler.trusted_user_agents, 4);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await

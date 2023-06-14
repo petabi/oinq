@@ -5,6 +5,15 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Introduced new request code: `RequestCode:TrustedUserAgentList`
+  - `RequestCode::TrustedUserAgentList`: This new request code facilitates the
+    REview  sending a list of trusted `user-agents` to the agent. This request code
+    is followed by a `Vec<String>` parameter, which is a list of trusted user-agents.
+
 ## [0.8.1] - 2023-06-05
 
 ### Added
@@ -209,6 +218,7 @@ without relying on the content of the response.
 
 - `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[Unreleased]: https://github.com/petabi/oinq/compare/0.8.1...main
 [0.8.1]: https://github.com/petabi/oinq/compare/0.8.0...0.8.1
 [0.8.0]: https://github.com/petabi/oinq/compare/0.7.1...0.8.0
 [0.7.1]: https://github.com/petabi/oinq/compare/0.7.0...0.7.1

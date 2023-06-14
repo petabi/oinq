@@ -62,6 +62,9 @@ pub enum RequestCode {
     /// Request Echo (for ping)
     EchoRequest = 17,
 
+    /// Update the list of trusted User-agent
+    TrustedUserAgentList = 18,
+
     /// Update the list of trusted domains
     TrustedDomainList = 0,
 
