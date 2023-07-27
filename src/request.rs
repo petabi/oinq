@@ -135,11 +135,6 @@ pub trait Handler: Send {
         return Err("not supported".to_string());
     }
 
-    // This feature is supported for all daemons that use oinq.
-    async fn echo_request(&mut self) -> Result<(), String> {
-        return Ok(());
-    }
-
     async fn trusted_user_agent_list(&mut self, _list: &[&str]) -> Result<(), String> {
         return Err("not supported".to_string());
     }
@@ -258,7 +253,7 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::EchoRequest => {
-                send_response(send, &mut buf, handler.echo_request().await).await?;
+                send_response(send, &mut buf, Ok::<(), String>(())).await?;
             }
             RequestCode::TrustedUserAgentList => {
                 let user_agent_list = codec
@@ -331,7 +326,6 @@ mod tests {
             internal_network_list: usize,
             allow_list: usize,
             block_list: usize,
-            echo_request_count: usize,
             trusted_user_agents: usize,
         }
 
@@ -374,11 +368,6 @@ mod tests {
 
             async fn block_list(&mut self, block_list: HostNetworkGroup) -> Result<(), String> {
                 self.block_list = block_list.ip_ranges.len();
-                Ok(())
-            }
-
-            async fn echo_request(&mut self) -> Result<(), String> {
-                self.echo_request_count += 1;
                 Ok(())
             }
 
@@ -526,7 +515,6 @@ mod tests {
         assert_eq!(handler.internal_network_list, 0);
         assert_eq!(handler.allow_list, 0);
         assert_eq!(handler.block_list, 0);
-        assert_eq!(handler.echo_request_count, 0);
         assert_eq!(handler.trusted_user_agents, 0);
         let res = super::handle(
             &mut handler,
@@ -541,7 +529,6 @@ mod tests {
         assert_eq!(handler.internal_network_list, 3);
         assert_eq!(handler.allow_list, 2);
         assert_eq!(handler.block_list, 1);
-        assert_eq!(handler.echo_request_count, 1);
         assert_eq!(handler.trusted_user_agents, 4);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
