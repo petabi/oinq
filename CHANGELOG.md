@@ -5,6 +5,12 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Fix clippy warnings.
+
 ## [0.9.0] - 2023-07-27
 
 ### Changed
@@ -225,6 +231,7 @@ without relying on the content of the response.
 
 - `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[Unreleased]: https://github.com/petabi/oinq/compare/0.8.2...main
 [0.9.0]: https://github.com/petabi/oinq/compare/0.8.2...0.9.0
 [0.8.2]: https://github.com/petabi/oinq/compare/0.8.1...0.8.2
 [0.8.1]: https://github.com/petabi/oinq/compare/0.8.0...0.8.1

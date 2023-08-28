@@ -1,10 +1,9 @@
 //! Functions and errors for handling length-delimited frames.
 
-use std::{mem, num::TryFromIntError};
-
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
+use std::{mem, num::TryFromIntError};
 use thiserror::Error;
 
 /// The error type for receiving and deserializing a frame.
