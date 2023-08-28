@@ -1,5 +1,6 @@
 //! Request handlers.
 
+use crate::{frame, message, RequestCode};
 use async_trait::async_trait;
 use bincode::Options;
 use ipnet::IpNet;
@@ -11,8 +12,6 @@ use std::{
     ops::RangeInclusive,
 };
 use thiserror::Error;
-
-use crate::{frame, message, RequestCode};
 
 /// CPU, memory, and disk usage.
 #[derive(Debug, Deserialize, Serialize)]

@@ -1,5 +1,9 @@
 //! Functions and errors for handling messages.
 
+use crate::{
+    frame::{self, RecvError, SendError},
+    RequestCode,
+};
 use bincode::Options;
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use semver::{Version, VersionReq};
@@ -9,11 +13,6 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 use thiserror::Error;
-
-use crate::{
-    frame::{self, RecvError, SendError},
-    RequestCode,
-};
 
 /// Receives a message as a stream of bytes with a big-endian 4-byte length
 /// header.
@@ -25,6 +24,10 @@ use crate::{
 /// * `RecvError::DeserializationFailure` if the message could not be
 ///   deserialized
 /// * `RecvError::ReadError` if the message could not be read
+///
+/// # Panics
+///
+/// * panic if it failed to convert 4 byte data to u32 value
 pub async fn recv_request_raw<'b>(
     recv: &mut RecvStream,
     buf: &'b mut Vec<u8>,
@@ -150,6 +153,10 @@ pub async fn client_handshake(
 /// # Errors
 ///
 /// Returns `HandshakeError` if the handshake failed.
+///
+/// # Panics
+///
+/// * panic if it failed to parse version requirement string.
 pub async fn server_handshake(
     conn: &Connection,
     addr: SocketAddr,
