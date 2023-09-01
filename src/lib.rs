@@ -5,7 +5,7 @@ pub mod request;
 mod test;
 
 use num_enum::{FromPrimitive, IntoPrimitive};
-pub use request::{Configuration, ResourceUsage};
+pub use request::{Configuration, Process, ResourceUsage};
 
 /// Numeric representation of the message types.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, IntoPrimitive, PartialEq)]
@@ -67,6 +67,9 @@ pub enum RequestCode {
 
     /// Update the list of trusted domains
     TrustedDomainList = 0,
+
+    /// Collect process list
+    ProcessList = 19,
 
     /// Unknown request
     #[num_enum(default)]
