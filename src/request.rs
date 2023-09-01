@@ -33,6 +33,15 @@ pub struct ResourceUsage {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct Process {
+    pub user: String,
+    pub cpu_usage: f32,
+    pub mem_usage: f64,
+    pub start_time: i64,
+    pub command: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Configuration {
     pub hog_sources: Option<Vec<String>>,
     pub hog_protocols: Option<Vec<String>>,
@@ -61,6 +70,7 @@ pub enum HandlerError {
 }
 
 /// A request handler that can handle a request to an agent.
+#[allow(clippy::diverging_sub_expression)]
 #[async_trait]
 pub trait Handler: Send {
     async fn dns_start(&mut self) -> Result<(), String> {
@@ -135,6 +145,9 @@ pub trait Handler: Send {
     }
 
     async fn trusted_user_agent_list(&mut self, _list: &[&str]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
+    async fn process_list(&mut self) -> Result<Vec<Process>, String> {
         return Err("not supported".to_string());
     }
 }
@@ -278,6 +291,9 @@ pub async fn handle<H: Handler>(
                 let result = handler.set_config(conf).await;
                 send_response(send, &mut buf, result).await?;
             }
+            RequestCode::ProcessList => {
+                send_response(send, &mut buf, handler.process_list().await).await?;
+            }
             RequestCode::Unknown => {
                 let err_msg = format!("unknown request code: {code}");
                 message::send_err(send, &mut buf, err_msg).await?;
@@ -304,7 +320,7 @@ mod tests {
         frame, message,
         request::HostNetworkGroup,
         test::{channel, TOKEN},
-        RequestCode,
+        Process, RequestCode,
     };
     use async_trait::async_trait;
     use ipnet::IpNet;
@@ -326,6 +342,7 @@ mod tests {
             allow_list: usize,
             block_list: usize,
             trusted_user_agents: usize,
+            process_list_cnt: usize,
         }
 
         #[async_trait]
@@ -373,6 +390,11 @@ mod tests {
             async fn trusted_user_agent_list(&mut self, list: &[&str]) -> Result<(), String> {
                 self.trusted_user_agents = list.len();
                 Ok(())
+            }
+
+            async fn process_list(&mut self) -> Result<Vec<Process>, String> {
+                self.process_list_cnt += 1;
+                Ok(Vec::new())
             }
         }
 
@@ -506,6 +528,16 @@ mod tests {
         .await;
         assert!(res.is_ok());
 
+        let mut buf = Vec::new();
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::ProcessList,
+            (),
+        )
+        .await;
+        assert!(res.is_ok());
+
         channel.client.send.finish().await.unwrap();
 
         assert_eq!(handler.reboot_count, 0);
@@ -515,6 +547,7 @@ mod tests {
         assert_eq!(handler.allow_list, 0);
         assert_eq!(handler.block_list, 0);
         assert_eq!(handler.trusted_user_agents, 0);
+        assert_eq!(handler.process_list_cnt, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -529,6 +562,7 @@ mod tests {
         assert_eq!(handler.allow_list, 2);
         assert_eq!(handler.block_list, 1);
         assert_eq!(handler.trusted_user_agents, 4);
+        assert_eq!(handler.process_list_cnt, 1);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await

@@ -7,6 +7,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `RequestCode::ProcessList` to request agent to collect host's process list.
+
 ### Changed
 
 - Fix clippy warnings.
