@@ -150,6 +150,9 @@ pub trait Handler: Send {
     async fn process_list(&mut self) -> Result<Vec<Process>, String> {
         return Err("not supported".to_string());
     }
+    async fn update_semi_supervised_models(&mut self, _list: &[u8]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
 }
 
 /// Handles requests to an agent.
@@ -294,6 +297,10 @@ pub async fn handle<H: Handler>(
             RequestCode::ProcessList => {
                 send_response(send, &mut buf, handler.process_list().await).await?;
             }
+            RequestCode::SemiSupervisedModels => {
+                let result = handler.update_semi_supervised_models(body).await;
+                send_response(send, &mut buf, result).await?;
+            }
             RequestCode::Unknown => {
                 let err_msg = format!("unknown request code: {code}");
                 message::send_err(send, &mut buf, err_msg).await?;
@@ -309,7 +316,7 @@ async fn send_response<T: Serialize>(
     body: T,
 ) -> Result<(), frame::SendError> {
     match frame::send(send, buf, body).await {
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
         Err(frame::SendError::WriteError(e)) => Err(frame::SendError::WriteError(e)),
         Err(e) => message::send_err(send, buf, e).await,
     }

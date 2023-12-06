@@ -130,7 +130,7 @@ pub async fn client_handshake(
     }
 
     match frame::recv_raw(&mut recv, &mut buf).await {
-        Ok(_) => {}
+        Ok(()) => {}
         Err(quinn::ReadExactError::FinishedEarly) => {
             return Err(HandshakeError::ConnectionClosed);
         }
@@ -317,12 +317,10 @@ pub async fn send_err<E: fmt::Display>(
 
 #[cfg(test)]
 mod tests {
-    use std::mem;
-
-    use bincode::Options;
-
     use crate::test::{channel, TOKEN};
     use crate::{frame, RequestCode};
+    use bincode::Options;
+    use std::mem;
 
     #[tokio::test]
     async fn handshake() {

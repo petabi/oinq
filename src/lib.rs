@@ -71,6 +71,9 @@ pub enum RequestCode {
     /// Collect process list
     ProcessList = 19,
 
+    /// Update the semi-supervised models
+    SemiSupervisedModels = 20,
+
     /// Unknown request
     #[num_enum(default)]
     Unknown = u32::MAX,
