@@ -5,7 +5,7 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.2] - 2023-12-07
 
 ### Added
 
@@ -242,7 +242,7 @@ without relying on the content of the response.
 
 - `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
-[Unreleased]: https://github.com/petabi/oinq/compare/0.9.1...main
+[0.9.2]: https://github.com/petabi/oinq/compare/0.9.1...0.9.2
 [0.9.1]: https://github.com/petabi/oinq/compare/0.9.0...0.9.1
 [0.9.0]: https://github.com/petabi/oinq/compare/0.8.2...0.9.0
 [0.8.2]: https://github.com/petabi/oinq/compare/0.8.1...0.8.2
