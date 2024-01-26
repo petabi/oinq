@@ -74,6 +74,9 @@ pub enum RequestCode {
     /// Update the semi-supervised models
     SemiSupervisedModels = 20,
 
+    /// Shutdown the host
+    Shutdown = 21,
+
     /// Unknown request
     #[num_enum(default)]
     Unknown = u32::MAX,
