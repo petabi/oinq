@@ -147,10 +147,16 @@ pub trait Handler: Send {
     async fn trusted_user_agent_list(&mut self, _list: &[&str]) -> Result<(), String> {
         return Err("not supported".to_string());
     }
+
     async fn process_list(&mut self) -> Result<Vec<Process>, String> {
         return Err("not supported".to_string());
     }
+
     async fn update_semi_supervised_models(&mut self, _list: &[u8]) -> Result<(), String> {
+        return Err("not supported".to_string());
+    }
+
+    async fn shutdown(&mut self) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 }
@@ -301,6 +307,9 @@ pub async fn handle<H: Handler>(
                 let result = handler.update_semi_supervised_models(body).await;
                 send_response(send, &mut buf, result).await?;
             }
+            RequestCode::Shutdown => {
+                send_response(send, &mut buf, handler.shutdown().await).await?;
+            }
             RequestCode::Unknown => {
                 let err_msg = format!("unknown request code: {code}");
                 message::send_err(send, &mut buf, err_msg).await?;
@@ -350,6 +359,7 @@ mod tests {
             block_list: usize,
             trusted_user_agents: usize,
             process_list_cnt: usize,
+            shutdown_count: usize,
         }
 
         #[async_trait]
@@ -403,6 +413,11 @@ mod tests {
                 self.process_list_cnt += 1;
                 Ok(Vec::new())
             }
+
+            async fn shutdown(&mut self) -> Result<(), String> {
+                self.shutdown_count += 1;
+                Ok(())
+            }
         }
 
         let mut handler = TestHandler::default();
@@ -414,6 +429,7 @@ mod tests {
             message::send_request(&mut channel.client.send, &mut buf, RequestCode::Reboot, ())
                 .await;
         assert!(res.is_ok());
+
         let res = message::send_forward_request(
             &mut channel.client.send,
             &mut buf,
@@ -423,11 +439,12 @@ mod tests {
         )
         .await;
         assert!(res.is_ok());
+
         let rules = vec![
             IpNet::from_str("192.168.1.0/24").unwrap(),
             IpNet::from_str("10.80.10.10/32").unwrap(),
         ];
-        let mut buf = Vec::new();
+
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
@@ -439,7 +456,7 @@ mod tests {
 
         let trusted_domains: Result<Vec<String>, String> =
             Ok(vec![".google.com".to_string(), ".gstatic.com".to_string()]);
-        let mut buf = Vec::new();
+
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
@@ -477,7 +494,6 @@ mod tests {
             ip_ranges: Vec::new(),
         };
 
-        let mut buf = Vec::new();
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
@@ -496,7 +512,6 @@ mod tests {
             )],
         };
 
-        let mut buf = Vec::new();
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
@@ -525,7 +540,7 @@ mod tests {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.42"
                 .to_string(),
         ];
-        let mut buf = Vec::new();
+
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
@@ -535,11 +550,19 @@ mod tests {
         .await;
         assert!(res.is_ok());
 
-        let mut buf = Vec::new();
         let res = message::send_request(
             &mut channel.client.send,
             &mut buf,
             RequestCode::ProcessList,
+            (),
+        )
+        .await;
+        assert!(res.is_ok());
+
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::Shutdown,
             (),
         )
         .await;
@@ -555,6 +578,7 @@ mod tests {
         assert_eq!(handler.block_list, 0);
         assert_eq!(handler.trusted_user_agents, 0);
         assert_eq!(handler.process_list_cnt, 0);
+        assert_eq!(handler.shutdown_count, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -570,6 +594,7 @@ mod tests {
         assert_eq!(handler.block_list, 1);
         assert_eq!(handler.trusted_user_agents, 4);
         assert_eq!(handler.process_list_cnt, 1);
+        assert_eq!(handler.shutdown_count, 1);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await
