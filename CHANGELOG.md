@@ -10,6 +10,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Add `RequestCode::Shutdown` to shutdown the host.
+- Add review_address to `Configuration`
 
 ## [0.9.2] - 2023-12-07
 
