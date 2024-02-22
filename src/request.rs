@@ -42,15 +42,40 @@ pub struct Process {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Configuration {
-    pub hog_sources: Option<Vec<String>>,
-    pub hog_protocols: Option<Vec<String>>,
-    pub publish_address: Option<SocketAddr>,
-    pub ingest_address: Option<SocketAddr>,
-    pub giganto_name: Option<String>,
-    pub dump_file: Option<String>,
-    pub dump_size: Option<usize>,
+pub enum Config {
+    Hog(HogConfig),
+    Piglet(PigletConfig),
+    Reconverge(ReconvergeConfig),
+    Crusher(CrusherConfig),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct HogConfig {
+    pub review_address: SocketAddr,
+    pub giganto_address: Option<SocketAddr>,
+    pub active_protocols: Option<Vec<String>>,
+    pub active_sources: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PigletConfig {
+    pub review_address: SocketAddr,
+    pub giganto_address: Option<SocketAddr>,
     pub log_options: Option<Vec<String>>,
+    pub http_file_types: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ReconvergeConfig {
+    pub review_address: SocketAddr,
+    pub giganto_address: Option<SocketAddr>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CrusherConfig {
+    pub review_address: SocketAddr,
+    pub giganto_ingest_address: Option<SocketAddr>,
+    pub giganto_publish_address: Option<SocketAddr>,
 }
 
 #[derive(Clone, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -120,11 +145,11 @@ pub trait Handler: Send {
         return Err("not supported".to_string());
     }
 
-    async fn get_config(&mut self) -> Result<Configuration, String> {
+    async fn get_config(&mut self) -> Result<Config, String> {
         return Err("not supported".to_string());
     }
 
-    async fn set_config(&mut self, _config: Configuration) -> Result<(), String> {
+    async fn set_config(&mut self, _config: Config) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 
@@ -295,7 +320,7 @@ pub async fn handle<H: Handler>(
             }
             RequestCode::SetConfig => {
                 let conf = codec
-                    .deserialize::<Configuration>(body)
+                    .deserialize::<Config>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
                 let result = handler.set_config(conf).await;
                 send_response(send, &mut buf, result).await?;
@@ -360,6 +385,7 @@ mod tests {
             trusted_user_agents: usize,
             process_list_cnt: usize,
             shutdown_count: usize,
+            set_config_cnt: usize,
         }
 
         #[async_trait]
@@ -416,6 +442,11 @@ mod tests {
 
             async fn shutdown(&mut self) -> Result<(), String> {
                 self.shutdown_count += 1;
+                Ok(())
+            }
+
+            async fn set_config(&mut self, _config: super::Config) -> Result<(), String> {
+                self.set_config_cnt += 1;
                 Ok(())
             }
         }
@@ -567,6 +598,35 @@ mod tests {
         )
         .await;
         assert!(res.is_ok());
+        let hog_config = super::Config::Hog(super::HogConfig {
+            review_address: "127.0.0.1:1234".parse().unwrap(),
+            giganto_address: None,
+            active_protocols: None,
+            active_sources: None,
+        });
+
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::SetConfig,
+            hog_config,
+        )
+        .await;
+        assert!(res.is_ok());
+
+        let reconverge_config = super::Config::Reconverge(super::ReconvergeConfig {
+            review_address: "127.0.0.1:1234".parse().unwrap(),
+            giganto_address: "127.0.0.1:2345".parse().ok(),
+        });
+
+        let res = message::send_request(
+            &mut channel.client.send,
+            &mut buf,
+            RequestCode::SetConfig,
+            reconverge_config,
+        )
+        .await;
+        assert!(res.is_ok());
 
         channel.client.send.finish().await.unwrap();
 
@@ -579,6 +639,7 @@ mod tests {
         assert_eq!(handler.trusted_user_agents, 0);
         assert_eq!(handler.process_list_cnt, 0);
         assert_eq!(handler.shutdown_count, 0);
+        assert_eq!(handler.set_config_cnt, 0);
         let res = super::handle(
             &mut handler,
             &mut channel.server.send,
@@ -595,6 +656,7 @@ mod tests {
         assert_eq!(handler.trusted_user_agents, 4);
         assert_eq!(handler.process_list_cnt, 1);
         assert_eq!(handler.shutdown_count, 1);
+        assert_eq!(handler.set_config_cnt, 2);
 
         frame::recv_raw(&mut channel.client.recv, &mut buf)
             .await

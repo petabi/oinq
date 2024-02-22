@@ -5,7 +5,7 @@ pub mod request;
 mod test;
 
 use num_enum::{FromPrimitive, IntoPrimitive};
-pub use request::{Configuration, Process, ResourceUsage};
+pub use request::{Config, Process, ResourceUsage};
 
 /// Numeric representation of the message types.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, IntoPrimitive, PartialEq)]
