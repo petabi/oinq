@@ -94,6 +94,9 @@ pub enum HandlerError {
     SendError(#[from] frame::SendError),
 }
 
+// IP address, port numbers, and protocols.
+pub type TrafficFilterRule = (IpNet, Option<Vec<u16>>, Option<Vec<u16>>);
+
 /// A request handler that can handle a request to an agent.
 #[allow(clippy::diverging_sub_expression)]
 #[async_trait]
@@ -141,7 +144,10 @@ pub trait Handler: Send {
         return Err("not supported".to_string());
     }
 
-    async fn update_traffic_filter_rules(&mut self, _rules: &[IpNet]) -> Result<(), String> {
+    async fn update_traffic_filter_rules(
+        &mut self,
+        _rules: &[TrafficFilterRule],
+    ) -> Result<(), String> {
         return Err("not supported".to_string());
     }
 
@@ -310,7 +316,7 @@ pub async fn handle<H: Handler>(
             }
             RequestCode::ReloadFilterRule => {
                 let rules = codec
-                    .deserialize::<Vec<IpNet>>(body)
+                    .deserialize::<Vec<TrafficFilterRule>>(body)
                     .map_err(frame::RecvError::DeserializationFailure)?;
                 let result = handler.update_traffic_filter_rules(&rules).await;
                 send_response(send, &mut buf, result).await?;
@@ -359,7 +365,7 @@ async fn send_response<T: Serialize>(
 mod tests {
     use crate::{
         frame, message,
-        request::HostNetworkGroup,
+        request::{HostNetworkGroup, TrafficFilterRule},
         test::{channel, TOKEN},
         Process, RequestCode,
     };
@@ -402,7 +408,10 @@ mod tests {
                 Ok(())
             }
 
-            async fn update_traffic_filter_rules(&mut self, rules: &[IpNet]) -> Result<(), String> {
+            async fn update_traffic_filter_rules(
+                &mut self,
+                rules: &[TrafficFilterRule],
+            ) -> Result<(), String> {
                 self.filter_rules = rules.len();
                 Ok(())
             }
@@ -472,8 +481,16 @@ mod tests {
         assert!(res.is_ok());
 
         let rules = vec![
-            IpNet::from_str("192.168.1.0/24").unwrap(),
-            IpNet::from_str("10.80.10.10/32").unwrap(),
+            (
+                IpNet::from_str("192.168.1.0/24").unwrap(),
+                Some(vec![80]),
+                Some(vec![6]),
+            ),
+            (
+                IpNet::from_str("10.80.10.10/32").unwrap(),
+                Some(vec![80]),
+                Some(vec![6]),
+            ),
         ];
 
         let res = message::send_request(
