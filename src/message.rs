@@ -1,9 +1,6 @@
 //! Functions and errors for handling messages.
 
-use crate::{
-    frame::{self, RecvError, SendError},
-    RequestCode,
-};
+use crate::frame::{self, RecvError, SendError};
 use bincode::Options;
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use semver::{Version, VersionReq};
@@ -234,38 +231,6 @@ where
     Ok(())
 }
 
-/// Sends a request encapsulated in a `RequestCode::Forward` request, with a
-/// big-endian 4-byte length header.
-///
-/// `buf` will be cleared after the response is sent.
-///
-/// # Errors
-///
-/// * `SendError::SerializationFailure` if the message could not be serialized
-/// * `SendError::WriteError` if the message could not be written
-pub async fn send_forward_request<C, B>(
-    send: &mut SendStream,
-    mut buf: &mut Vec<u8>,
-    dst: &str,
-    code: C,
-    body: B,
-) -> Result<(), SendError>
-where
-    C: Into<u32>,
-    B: Serialize,
-{
-    buf.clear();
-    buf.extend_from_slice(&u32::from(RequestCode::Forward).to_le_bytes());
-    let codec = bincode::DefaultOptions::new();
-    codec.serialize_into(&mut buf, dst)?;
-    let len = codec.serialized_size(&body)? + mem::size_of::<u32>() as u64;
-    codec.serialize_into(&mut buf, &len)?;
-    serialize_request(buf, code, body)?;
-    frame::send_raw(send, buf).await?;
-    buf.clear();
-    Ok(())
-}
-
 /// Serializes the given request and appends it to `buf`.
 ///
 /// # Errors
@@ -319,8 +284,6 @@ pub async fn send_err<E: fmt::Display>(
 mod tests {
     use crate::test::{channel, TOKEN};
     use crate::{frame, RequestCode};
-    use bincode::Options;
-    use std::mem;
 
     #[tokio::test]
     async fn handshake() {
@@ -451,28 +414,6 @@ mod tests {
             .unwrap();
         assert_eq!(code, u32::from(RequestCode::ReloadTi));
         assert!(body.is_empty());
-
-        buf.clear();
-        super::send_forward_request(
-            &mut channel.server.send,
-            &mut buf,
-            "agent@host",
-            RequestCode::ReloadTi,
-            (),
-        )
-        .await
-        .unwrap();
-        let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
-        assert_eq!(code, u32::from(RequestCode::Forward));
-        let (dst, msg) = bincode::DefaultOptions::new()
-            .deserialize::<(String, &[u8])>(body)
-            .unwrap();
-        assert_eq!(dst, "agent@host");
-        assert_eq!(msg.len(), mem::size_of::<u32>());
-        let code = u32::from_le_bytes(msg[..mem::size_of::<u32>()].try_into().expect("4 bytes"));
-        assert_eq!(RequestCode::from(code), RequestCode::ReloadTi);
     }
 
     #[tokio::test]

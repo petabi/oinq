@@ -17,9 +17,6 @@ pub enum RequestCode {
     /// Stop DNS filtering
     DnsStop = 2,
 
-    /// Forward a request to another agent
-    Forward = 3,
-
     /// Reboot the host
     Reboot = 4,
 
