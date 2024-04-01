@@ -16,7 +16,6 @@ futures = "0.3"
 ipnet = { version = "2", features = ["serde"] }
 num_enum = "0.7"
 quinn = "0.10"
-semver = "1"
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 tokio = "1"

@@ -10,7 +10,7 @@ pub(crate) struct Channel {
 }
 
 pub(crate) struct Endpoint {
-    pub(crate) conn: Connection,
+    pub(crate) _conn: Connection,
     pub(crate) send: SendStream,
     pub(crate) recv: RecvStream,
 }
@@ -80,12 +80,12 @@ pub(crate) async fn channel() -> Channel {
 
     Channel {
         server: self::Endpoint {
-            conn: server_connection,
+            _conn: server_connection,
             send: server_send,
             recv: server_recv,
         },
         client: self::Endpoint {
-            conn: client_connection,
+            _conn: client_connection,
             send: client_send,
             recv: client_recv,
         },
