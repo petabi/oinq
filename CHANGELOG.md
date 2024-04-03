@@ -7,6 +7,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `SendError::MessageTooLarge` no longer contains the underlying error,
+  `std::num::TryFromIntError`, since it does not provide any useful information.
+
 ### Removed
 
 - `RequestCode::Forward` and `message::send_forward_request`, since forwarding

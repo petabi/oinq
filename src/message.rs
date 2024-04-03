@@ -60,7 +60,7 @@ impl From<SendError> for HandshakeError {
     fn from(e: SendError) -> Self {
         match e {
             SendError::SerializationFailure(e) => HandshakeError::SerializationFailure(e),
-            SendError::MessageTooLarge(_) => HandshakeError::MessageTooLarge,
+            SendError::MessageTooLarge => HandshakeError::MessageTooLarge,
             SendError::WriteError(e) => HandshakeError::WriteError(e),
         }
     }
