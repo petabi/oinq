@@ -3,7 +3,7 @@
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
-use std::{mem, num::TryFromIntError};
+use std::mem;
 use thiserror::Error;
 
 /// The error type for receiving and deserializing a frame.
@@ -60,7 +60,7 @@ pub enum SendError {
     #[error("failed serializing message")]
     SerializationFailure(#[from] bincode::Error),
     #[error("message is too large")]
-    MessageTooLarge(#[from] TryFromIntError),
+    MessageTooLarge,
     #[error("failed to write to a stream")]
     WriteError(#[from] quinn::WriteError),
 }
@@ -80,7 +80,7 @@ where
 {
     buf.resize(mem::size_of::<u32>(), 0);
     bincode::DefaultOptions::new().serialize_into(&mut *buf, &msg)?;
-    let len = u32::try_from(buf.len() - 4)?;
+    let len = u32::try_from(buf.len() - 4).map_err(|_| SendError::MessageTooLarge)?;
     buf[..mem::size_of::<u32>()].clone_from_slice(&len.to_be_bytes());
     send.write_all(buf).await?;
     buf.clear();
@@ -94,7 +94,7 @@ where
 /// * `SendError::MessageTooLarge`: if the message is too large
 /// * `SendError::WriteError`: if the message could not be written
 pub async fn send_raw(send: &mut SendStream, buf: &[u8]) -> Result<(), SendError> {
-    let len = u32::try_from(buf.len())?;
+    let len = u32::try_from(buf.len()).map_err(|_| SendError::MessageTooLarge)?;
     send.write_all(&len.to_be_bytes()).await?;
     send.write_all(buf).await?;
     Ok(())
