@@ -11,6 +11,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `SendError::MessageTooLarge` no longer contains the underlying error,
   `std::num::TryFromIntError`, since it does not provide any useful information.
+- Merge `SendError`'s `MessageTooLarge` and `SerializationFailure`, and
+  `HandshakeError`'s `MessageTooLarge` and `SerializationFailure` into
+  `MessageTooLarge`, since serialization into a memory buffer fails only when
+  the message is too large.
 
 ### Removed
 

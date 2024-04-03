@@ -46,8 +46,6 @@ pub enum HandshakeError {
     ReadError(#[from] quinn::ReadError),
     #[error("cannot send a message")]
     WriteError(#[from] quinn::WriteError),
-    #[error("cannot serialize a message")]
-    SerializationFailure(#[from] bincode::Error),
     #[error("arguments are too long")]
     MessageTooLarge,
     #[error("invalid message")]
@@ -59,7 +57,6 @@ pub enum HandshakeError {
 impl From<SendError> for HandshakeError {
     fn from(e: SendError) -> Self {
         match e {
-            SendError::SerializationFailure(e) => HandshakeError::SerializationFailure(e),
             SendError::MessageTooLarge => HandshakeError::MessageTooLarge,
             SendError::WriteError(e) => HandshakeError::WriteError(e),
         }
@@ -72,7 +69,7 @@ impl From<SendError> for HandshakeError {
 ///
 /// # Errors
 ///
-/// * `SendError::SerializationFailure` if the message could not be serialized
+/// * `SendError::MessageTooLarge` if the message is too long to be serialized
 /// * `SendError::WriteError` if the message could not be written
 pub async fn send_request<C, B>(
     send: &mut SendStream,
@@ -84,25 +81,15 @@ where
     C: Into<u32>,
     B: Serialize,
 {
+    use std::io::Write;
+
     buf.clear();
-    serialize_request(buf, code, body)?;
+    buf.extend_from_slice(&code.into().to_le_bytes());
+    bincode::DefaultOptions::new()
+        .serialize_into(buf as &mut dyn Write, &body)
+        .map_err(|_| SendError::MessageTooLarge)?;
     frame::send_raw(send, buf).await?;
     buf.clear();
-    Ok(())
-}
-
-/// Serializes the given request and appends it to `buf`.
-///
-/// # Errors
-///
-/// * `bincode::Error` if the message could not be serialized
-fn serialize_request<C, B>(buf: &mut Vec<u8>, code: C, body: B) -> Result<(), bincode::Error>
-where
-    C: Into<u32>,
-    B: Serialize,
-{
-    buf.extend_from_slice(&code.into().to_le_bytes());
-    bincode::DefaultOptions::new().serialize_into(buf, &body)?;
     Ok(())
 }
 
@@ -112,7 +99,7 @@ where
 ///
 /// # Errors
 ///
-/// * `SendError::SerializationFailure` if the message could not be serialized
+/// * `SendError::MessageTooLarge` if `body` is too large to be serialized
 /// * `SendError::WriteError` if the message could not be written
 pub async fn send_ok<T: Serialize>(
     send: &mut SendStream,
@@ -129,7 +116,7 @@ pub async fn send_ok<T: Serialize>(
 ///
 /// # Errors
 ///
-/// * `SendError::SerializationFailure` if the message could not be serialized
+/// * `SendError::MessageTooLarge` if `e` is too large to be serialized
 /// * `SendError::WriteError` if the message could not be written
 pub async fn send_err<E: fmt::Display>(
     send: &mut SendStream,
