@@ -57,8 +57,6 @@ pub async fn recv_raw<'b>(
 /// The error type for sending a message as a frame.
 #[derive(Debug, Error)]
 pub enum SendError {
-    #[error("failed serializing message")]
-    SerializationFailure(#[from] bincode::Error),
     #[error("message is too large")]
     MessageTooLarge,
     #[error("failed to write to a stream")]
@@ -71,7 +69,6 @@ pub enum SendError {
 ///
 /// # Errors
 ///
-/// * `SendError::SerializationFailure`: if the message could not be serialized
 /// * `SendError::MessageTooLarge`: if the message is too large
 /// * `SendError::WriteError`: if the message could not be written
 pub async fn send<T>(send: &mut SendStream, buf: &mut Vec<u8>, msg: T) -> Result<(), SendError>
@@ -79,7 +76,9 @@ where
     T: Serialize,
 {
     buf.resize(mem::size_of::<u32>(), 0);
-    bincode::DefaultOptions::new().serialize_into(&mut *buf, &msg)?;
+    bincode::DefaultOptions::new()
+        .serialize_into(&mut *buf, &msg)
+        .map_err(|_| SendError::MessageTooLarge)?;
     let len = u32::try_from(buf.len() - 4).map_err(|_| SendError::MessageTooLarge)?;
     buf[..mem::size_of::<u32>()].clone_from_slice(&len.to_be_bytes());
     send.write_all(buf).await?;
