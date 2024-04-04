@@ -7,6 +7,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `request::parse_args` and `request::send_response` to help implementing
+  request handlers.
+
 ### Changed
 
 - `SendError::MessageTooLarge` no longer contains the underlying error,

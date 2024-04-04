@@ -205,7 +205,6 @@ pub async fn handle<H: Handler>(
     recv: &mut RecvStream,
 ) -> Result<(), HandlerError> {
     let mut buf = Vec::new();
-    let codec = bincode::DefaultOptions::new();
     loop {
         let (code, body) = match message::recv_request_raw(recv, &mut buf).await {
             Ok(res) => res,
@@ -232,9 +231,7 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, handler.reload_config().await).await?;
             }
             RequestCode::ReloadTi => {
-                let version = codec
-                    .deserialize::<&str>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let version = parse_args::<&str>(body)?;
                 let result = handler.reload_ti(version).await;
                 send_response(send, &mut buf, result).await?;
             }
@@ -242,9 +239,7 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, handler.resource_usage().await).await?;
             }
             RequestCode::TorExitNodeList => {
-                let nodes = codec
-                    .deserialize::<Vec<&str>>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let nodes = parse_args::<Vec<&str>>(body)?;
                 let result = handler.tor_exit_node_list(&nodes).await;
                 send_response(send, &mut buf, result).await?;
             }
@@ -257,10 +252,7 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::TrustedDomainList => {
-                let domains = codec
-                    .deserialize::<Result<Vec<&str>, String>>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
-
+                let domains = parse_args::<Result<Vec<&str>, String>>(body)?;
                 let result = if let Ok(domains) = domains {
                     handler.trusted_domain_list(&domains).await
                 } else {
@@ -269,23 +261,17 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::InternalNetworkList => {
-                let network_list = codec
-                    .deserialize::<HostNetworkGroup>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let network_list = parse_args::<HostNetworkGroup>(body)?;
                 let result = handler.internal_network_list(network_list).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::AllowList => {
-                let allow_list = codec
-                    .deserialize::<HostNetworkGroup>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let allow_list = parse_args::<HostNetworkGroup>(body)?;
                 let result = handler.allow_list(allow_list).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::BlockList => {
-                let block_list = codec
-                    .deserialize::<HostNetworkGroup>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let block_list = parse_args::<HostNetworkGroup>(body)?;
                 let result = handler.block_list(block_list).await;
                 send_response(send, &mut buf, result).await?;
             }
@@ -293,16 +279,12 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, Ok::<(), String>(())).await?;
             }
             RequestCode::TrustedUserAgentList => {
-                let user_agent_list = codec
-                    .deserialize::<Vec<&str>>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let user_agent_list = parse_args::<Vec<&str>>(body)?;
                 let result = handler.trusted_user_agent_list(&user_agent_list).await;
                 send_response(send, &mut buf, result).await?;
             }
             RequestCode::ReloadFilterRule => {
-                let rules = codec
-                    .deserialize::<Vec<TrafficFilterRule>>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let rules = parse_args::<Vec<TrafficFilterRule>>(body)?;
                 let result = handler.update_traffic_filter_rules(&rules).await;
                 send_response(send, &mut buf, result).await?;
             }
@@ -310,9 +292,7 @@ pub async fn handle<H: Handler>(
                 send_response(send, &mut buf, handler.get_config().await).await?;
             }
             RequestCode::SetConfig => {
-                let conf = codec
-                    .deserialize::<Config>(body)
-                    .map_err(frame::RecvError::DeserializationFailure)?;
+                let conf = parse_args::<Config>(body)?;
                 let result = handler.set_config(conf).await;
                 send_response(send, &mut buf, result).await?;
             }
@@ -335,7 +315,25 @@ pub async fn handle<H: Handler>(
     Ok(())
 }
 
-async fn send_response<T: Serialize>(
+/// Parses the arguments of a request.
+///
+/// # Errors
+///
+/// Returns `frame::RecvError::DeserializationFailure`: if the arguments could
+/// not be deserialized.
+pub fn parse_args<'de, T: Deserialize<'de>>(args: &'de [u8]) -> Result<T, frame::RecvError> {
+    bincode::DefaultOptions::new()
+        .deserialize::<T>(args)
+        .map_err(frame::RecvError::DeserializationFailure)
+}
+
+/// Sends a response to a request.
+///
+/// # Errors
+///
+/// * `SendError::MessageTooLarge` if `e` is too large to be serialized
+/// * `SendError::WriteError` if the message could not be written
+pub async fn send_response<T: Serialize>(
     send: &mut SendStream,
     buf: &mut Vec<u8>,
     body: T,
