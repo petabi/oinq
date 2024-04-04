@@ -1,7 +1,9 @@
 # Oinq
 
-Oinq implements the communication protocol between agents in the REview
-ecosystem using QUIC.
+Oinq is a crate focused on providing low-level network communication primitives
+using QUIC, suitable for applications implementing RPC-like protocols. This
+crate is designed to offer foundational support for efficient and secure message
+and stream handling over the network.
 
 ## License
 

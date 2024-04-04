@@ -100,28 +100,24 @@ pub async fn send_err<E: fmt::Display>(
 
 #[cfg(test)]
 mod tests {
+    use crate::frame;
     use crate::test::{channel, TOKEN};
-    use crate::{frame, RequestCode};
 
     #[tokio::test]
     async fn send_and_recv() {
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
+        const CODE: u32 = 0x1234;
         let mut buf = Vec::new();
-        super::send_request(
-            &mut channel.server.send,
-            &mut buf,
-            RequestCode::ReloadTi,
-            (),
-        )
-        .await
-        .unwrap();
+        super::send_request(&mut channel.server.send, &mut buf, CODE, ())
+            .await
+            .unwrap();
         assert!(buf.is_empty());
         let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
-        assert_eq!(code, u32::from(RequestCode::ReloadTi));
+        assert_eq!(code, CODE);
         assert!(body.is_empty());
     }
 
