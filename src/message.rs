@@ -2,10 +2,9 @@
 
 use crate::frame::{self, RecvError, SendError};
 use bincode::Options;
-use quinn::{ConnectionError, RecvStream, SendStream};
+use quinn::{RecvStream, SendStream};
 use serde::Serialize;
 use std::{fmt, mem};
-use thiserror::Error;
 
 /// Receives a message as a stream of bytes with a big-endian 4-byte length
 /// header.
@@ -33,34 +32,6 @@ pub async fn recv_request_raw<'b>(
     }
     let code = u32::from_le_bytes(buf[..mem::size_of::<u32>()].try_into().expect("4 bytes"));
     Ok((code, buf[mem::size_of::<u32>()..].as_ref()))
-}
-
-/// The error type for a handshake failure.
-#[derive(Debug, Error)]
-pub enum HandshakeError {
-    #[error("connection closed by peer")]
-    ConnectionClosed,
-    #[error("connection lost")]
-    ConnectionLost(#[from] ConnectionError),
-    #[error("cannot receive a message")]
-    ReadError(#[from] quinn::ReadError),
-    #[error("cannot send a message")]
-    WriteError(#[from] quinn::WriteError),
-    #[error("arguments are too long")]
-    MessageTooLarge,
-    #[error("invalid message")]
-    InvalidMessage,
-    #[error("protocol version {0} is not supported; version {1} is required")]
-    IncompatibleProtocol(String, String),
-}
-
-impl From<SendError> for HandshakeError {
-    fn from(e: SendError) -> Self {
-        match e {
-            SendError::MessageTooLarge => HandshakeError::MessageTooLarge,
-            SendError::WriteError(e) => HandshakeError::WriteError(e),
-        }
-    }
 }
 
 /// Sends a request with a big-endian 4-byte length header.
