@@ -20,8 +20,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `RequestCode::Forward` and `message::send_forward_request`, since forwarding
   messages between agents is no longer supported.
-- `client_handshake`, `server_handshake`, and `AgentInfo`. These belong to the
-  `review-protocol` crate.
+- `client_handshake`, `server_handshake`, `HandshakeError`, and `AgentInfo`.
+  These belong to the `review-protocol` crate.
 
 ## [0.11.0] - 2024-03-25
 
