@@ -3,17 +3,8 @@
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
-use std::mem;
+use std::{io, mem};
 use thiserror::Error;
-
-/// The error type for receiving and deserializing a frame.
-#[derive(Debug, Error)]
-pub enum RecvError {
-    #[error("failed deserializing message")]
-    DeserializationFailure(#[from] bincode::Error),
-    #[error("failed to read from a stream")]
-    ReadError(#[from] quinn::ReadExactError),
-}
 
 /// Receives and deserializes a message with a big-endian 4-byte length header.
 ///
@@ -22,15 +13,20 @@ pub enum RecvError {
 ///
 /// # Errors
 ///
-/// * `RecvError::DeserializationFailure`: if the message could not be
-///   deserialized
-/// * `RecvError::ReadError`: if the message could not be read
-pub async fn recv<'b, T>(recv: &mut RecvStream, buf: &'b mut Vec<u8>) -> Result<T, RecvError>
+/// Returns an error if the message could not be read or deserialized.
+pub async fn recv<'b, T>(recv: &mut RecvStream, buf: &'b mut Vec<u8>) -> io::Result<T>
 where
     T: Deserialize<'b>,
 {
     recv_raw(recv, buf).await?;
-    Ok(bincode::DefaultOptions::new().deserialize(buf)?)
+    bincode::DefaultOptions::new()
+        .deserialize(buf)
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed deserializing message: {e}"),
+            )
+        })
 }
 
 /// Receives a sequence of bytes with a big-endian 4-byte length header.
@@ -40,18 +36,97 @@ where
 ///
 /// # Errors
 ///
-/// * `quinn::ReadExactError`: if the message could not be read
-pub async fn recv_raw<'b>(
-    recv: &mut RecvStream,
-    buf: &mut Vec<u8>,
-) -> Result<(), quinn::ReadExactError> {
+/// Returns an error if the message could not be read.
+pub async fn recv_raw<'b>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> io::Result<()> {
     let mut len_buf = [0; mem::size_of::<u32>()];
-    recv.read_exact(&mut len_buf).await?;
+    if let Err(e) = recv.read_exact(&mut len_buf).await {
+        return Err(from_read_exact_error_to_io_error(e));
+    }
     let len = u32::from_be_bytes(len_buf) as usize;
 
     buf.resize(len, 0);
-    recv.read_exact(buf.as_mut_slice()).await?;
-    Ok(())
+    recv.read_exact(buf.as_mut_slice())
+        .await
+        .map_err(from_read_exact_error_to_io_error)
+}
+
+fn from_read_exact_error_to_io_error(e: quinn::ReadExactError) -> io::Error {
+    match e {
+        quinn::ReadExactError::FinishedEarly => io::Error::from(io::ErrorKind::UnexpectedEof),
+        quinn::ReadExactError::ReadError(e) => from_read_error_to_io_error(e),
+    }
+}
+
+fn from_read_error_to_io_error(e: quinn::ReadError) -> io::Error {
+    use quinn::ReadError;
+
+    match e {
+        ReadError::Reset(_) => io::Error::from(io::ErrorKind::ConnectionReset),
+        ReadError::ConnectionLost(e) => from_connection_error_to_io_error(e),
+        ReadError::UnknownStream => io::Error::new(io::ErrorKind::NotFound, "unknown stream"),
+        ReadError::IllegalOrderedRead => {
+            io::Error::new(io::ErrorKind::InvalidInput, "illegal ordered read")
+        }
+        ReadError::ZeroRttRejected => {
+            io::Error::new(io::ErrorKind::ConnectionRefused, "0-RTT rejected")
+        }
+    }
+}
+
+fn from_connection_error_to_io_error(e: quinn::ConnectionError) -> io::Error {
+    use quinn::ConnectionError;
+
+    match e {
+        ConnectionError::VersionMismatch => io::Error::from(io::ErrorKind::ConnectionRefused),
+        ConnectionError::TransportError(e) => from_transport_error_to_io_error(e),
+        ConnectionError::ConnectionClosed(e) => io::Error::new(
+            io::ErrorKind::ConnectionAborted,
+            String::from_utf8_lossy(&e.reason),
+        ),
+        ConnectionError::ApplicationClosed(e) => io::Error::new(
+            io::ErrorKind::ConnectionAborted,
+            String::from_utf8_lossy(&e.reason),
+        ),
+        ConnectionError::Reset => io::Error::from(io::ErrorKind::ConnectionReset),
+        ConnectionError::TimedOut => io::Error::from(io::ErrorKind::TimedOut),
+        ConnectionError::LocallyClosed => {
+            io::Error::new(io::ErrorKind::Other, "connection locally closed")
+        }
+    }
+}
+
+fn from_transport_error_to_io_error(e: quinn_proto::TransportError) -> io::Error {
+    use quinn_proto::TransportErrorCode;
+
+    match e.code {
+        TransportErrorCode::CONNECTION_REFUSED => {
+            io::Error::new(io::ErrorKind::ConnectionRefused, e.reason)
+        }
+        TransportErrorCode::CONNECTION_ID_LIMIT_ERROR
+        | TransportErrorCode::CRYPTO_BUFFER_EXCEEDED
+        | TransportErrorCode::FINAL_SIZE_ERROR
+        | TransportErrorCode::FLOW_CONTROL_ERROR
+        | TransportErrorCode::FRAME_ENCODING_ERROR
+        | TransportErrorCode::INVALID_TOKEN
+        | TransportErrorCode::PROTOCOL_VIOLATION
+        | TransportErrorCode::STREAM_LIMIT_ERROR
+        | TransportErrorCode::STREAM_STATE_ERROR
+        | TransportErrorCode::TRANSPORT_PARAMETER_ERROR => {
+            io::Error::new(io::ErrorKind::InvalidData, e.reason)
+        }
+        TransportErrorCode::NO_VIABLE_PATH => {
+            // TODO: Use `io::ErrorKind::HostUnreachable` when it is stabilized
+            io::Error::new(io::ErrorKind::Other, e.reason)
+        }
+        _ => {
+            // * TransportErrorCode::AEAD_LIMIT_REACHED
+            // * TransportErrorCode::APPLICATION_ERROR
+            // * TransportErrorCode::INTERNAL_ERROR
+            // * TransportErrorCode::KEY_UPDATE_ERROR
+            // * TransportErrorCode::NO_ERROR
+            io::Error::new(io::ErrorKind::Other, e.reason)
+        }
+    }
 }
 
 /// The error type for sending a message as a frame.

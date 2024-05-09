@@ -1,10 +1,10 @@
 //! Functions and errors for handling messages.
 
-use crate::frame::{self, RecvError, SendError};
+use crate::frame::{self, SendError};
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::Serialize;
-use std::{fmt, mem};
+use std::{fmt, io, mem};
 
 /// Receives a message as a stream of bytes with a big-endian 4-byte length
 /// header.
@@ -13,9 +13,7 @@ use std::{fmt, mem};
 ///
 /// # Errors
 ///
-/// * `RecvError::DeserializationFailure` if the message could not be
-///   deserialized
-/// * `RecvError::ReadError` if the message could not be read
+/// Returns an error if the message could not be read or deserialized.
 ///
 /// # Panics
 ///
@@ -23,12 +21,13 @@ use std::{fmt, mem};
 pub async fn recv_request_raw<'b>(
     recv: &mut RecvStream,
     buf: &'b mut Vec<u8>,
-) -> Result<(u32, &'b [u8]), RecvError> {
+) -> io::Result<(u32, &'b [u8])> {
     frame::recv_raw(recv, buf).await?;
     if buf.len() < mem::size_of::<u32>() {
-        return Err(RecvError::DeserializationFailure(Box::new(
-            bincode::ErrorKind::SizeLimit,
-        )));
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "message too short to contain a code",
+        ));
     }
     let code = u32::from_le_bytes(buf[..mem::size_of::<u32>()].try_into().expect("4 bytes"));
     Ok((code, buf[mem::size_of::<u32>()..].as_ref()))
