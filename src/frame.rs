@@ -52,7 +52,7 @@ pub async fn recv_raw<'b>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> io::Resul
 
 fn from_read_exact_error_to_io_error(e: quinn::ReadExactError) -> io::Error {
     match e {
-        quinn::ReadExactError::FinishedEarly => io::Error::from(io::ErrorKind::UnexpectedEof),
+        quinn::ReadExactError::FinishedEarly(_) => io::Error::from(io::ErrorKind::UnexpectedEof),
         quinn::ReadExactError::ReadError(e) => from_read_error_to_io_error(e),
     }
 }
@@ -63,7 +63,7 @@ fn from_read_error_to_io_error(e: quinn::ReadError) -> io::Error {
     match e {
         ReadError::Reset(_) => io::Error::from(io::ErrorKind::ConnectionReset),
         ReadError::ConnectionLost(e) => from_connection_error_to_io_error(e),
-        ReadError::UnknownStream => io::Error::new(io::ErrorKind::NotFound, "unknown stream"),
+        ReadError::ClosedStream => io::Error::new(io::ErrorKind::NotFound, "unknown stream"),
         ReadError::IllegalOrderedRead => {
             io::Error::new(io::ErrorKind::InvalidInput, "illegal ordered read")
         }
@@ -91,6 +91,9 @@ fn from_connection_error_to_io_error(e: quinn::ConnectionError) -> io::Error {
         ConnectionError::TimedOut => io::Error::from(io::ErrorKind::TimedOut),
         ConnectionError::LocallyClosed => {
             io::Error::new(io::ErrorKind::Other, "connection locally closed")
+        }
+        ConnectionError::CidsExhausted => {
+            io::Error::new(io::ErrorKind::Other, "cid space exhausted")
         }
     }
 }

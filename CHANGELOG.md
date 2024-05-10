@@ -16,6 +16,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `RecvError` is no longer used. The read functions return `std::io::Error`
   instead.
+- Bump dependencies.
+  - Update quinn to version 0.11.
+  - Update rustls to version 0.23.
+  - Update rcgen to version 0.13.
 
 ## [0.12.0] - 2024-04-04
 

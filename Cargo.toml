@@ -13,8 +13,8 @@ license = "Apache-2.0"
 bincode = "1"
 futures = "0.3"
 num_enum = "0.7"
-quinn = "0.10"
-quinn-proto = "0.10"
+quinn-proto = "0.11"
+quinn = "0.11"
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 tokio = "1"
@@ -22,6 +22,10 @@ tokio = "1"
 [dev-dependencies]
 futures = "0.3"
 lazy_static = "1"
-rcgen = "0.12"
-rustls = "0.21"
+rcgen = "0.13"
+quinn = { version = "0.11", features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "std",
+] }
 tokio = { version = "1", features = ["macros", "rt", "sync"] }
