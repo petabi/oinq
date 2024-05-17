@@ -11,15 +11,15 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `frame::recv`, `frame::recv_raw`, `message::recv_request_raw`, and
   `request::parse_args` returns `io::Error` instead of `RecvError`.
+- Bump dependencies.
+  - Update quinn to version 0.11.
+  - Update rustls to version 0.23.
+  - Update rcgen to version 0.13.
 
 ### Removed
 
 - `RecvError` and `SendError` are no longer used. The recv/send functions return
   `std::io::Error` instead.
-- Bump dependencies.
-  - Update quinn to version 0.11.
-  - Update rustls to version 0.23.
-  - Update rcgen to version 0.13.
 
 ## [0.12.0] - 2024-04-04
 
