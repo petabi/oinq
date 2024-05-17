@@ -63,7 +63,7 @@ fn from_read_error_to_io_error(e: quinn::ReadError) -> io::Error {
     match e {
         ReadError::Reset(_) => io::Error::from(io::ErrorKind::ConnectionReset),
         ReadError::ConnectionLost(e) => from_connection_error_to_io_error(e),
-        ReadError::ClosedStream => io::Error::new(io::ErrorKind::NotFound, "unknown stream"),
+        ReadError::ClosedStream => io::Error::new(io::ErrorKind::Other, "closed stream"),
         ReadError::IllegalOrderedRead => {
             io::Error::new(io::ErrorKind::InvalidInput, "illegal ordered read")
         }
