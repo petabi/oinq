@@ -1,6 +1,6 @@
 //! Functions and errors for handling messages.
 
-use crate::frame::{self, SendError};
+use crate::frame;
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::Serialize;
@@ -39,14 +39,14 @@ pub async fn recv_request_raw<'b>(
 ///
 /// # Errors
 ///
-/// * `SendError::MessageTooLarge` if the message is too long to be serialized
-/// * `SendError::WriteError` if the message could not be written
+/// Returns [`std::io::ErrorKind::InvalidData`] if the message is too large, or
+/// other errors if the message could not be written to the stream.
 pub async fn send_request<C, B>(
     send: &mut SendStream,
     buf: &mut Vec<u8>,
     code: C,
     body: B,
-) -> Result<(), SendError>
+) -> io::Result<()>
 where
     C: Into<u32>,
     B: Serialize,
@@ -57,7 +57,7 @@ where
     buf.extend_from_slice(&code.into().to_le_bytes());
     bincode::DefaultOptions::new()
         .serialize_into(buf as &mut dyn Write, &body)
-        .map_err(|_| SendError::MessageTooLarge)?;
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     frame::send_raw(send, buf).await?;
     buf.clear();
     Ok(())
@@ -69,15 +69,14 @@ where
 ///
 /// # Errors
 ///
-/// * `SendError::MessageTooLarge` if `body` is too large to be serialized
-/// * `SendError::WriteError` if the message could not be written
+/// Returns [`std::io::ErrorKind::InvalidData`] if the message is too large, or
+/// other errors if the message could not be written to the stream.
 pub async fn send_ok<T: Serialize>(
     send: &mut SendStream,
     buf: &mut Vec<u8>,
     body: T,
-) -> Result<(), SendError> {
-    frame::send(send, buf, Ok(body) as Result<T, &str>).await?;
-    Ok(())
+) -> io::Result<()> {
+    frame::send(send, buf, Ok(body) as Result<T, &str>).await
 }
 
 /// Sends an `Err` response.
@@ -86,15 +85,14 @@ pub async fn send_ok<T: Serialize>(
 ///
 /// # Errors
 ///
-/// * `SendError::MessageTooLarge` if `e` is too large to be serialized
-/// * `SendError::WriteError` if the message could not be written
+/// Returns [`std::io::ErrorKind::InvalidData`] if the message is too large, or
+/// other errors if the message could not be written to the stream.
 pub async fn send_err<E: fmt::Display>(
     send: &mut SendStream,
     buf: &mut Vec<u8>,
     e: E,
-) -> Result<(), SendError> {
-    frame::send(send, buf, Err(format!("{e:#}")) as Result<(), String>).await?;
-    Ok(())
+) -> io::Result<()> {
+    frame::send(send, buf, Err(format!("{e:#}")) as Result<(), String>).await
 }
 
 #[cfg(test)]

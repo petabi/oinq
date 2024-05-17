@@ -27,16 +27,20 @@ pub fn parse_args<'de, T: Deserialize<'de>>(args: &'de [u8]) -> io::Result<T> {
 ///
 /// # Errors
 ///
-/// * `SendError::MessageTooLarge` if `e` is too large to be serialized
-/// * `SendError::WriteError` if the message could not be written
+/// Returns [`std::io::ErrorKind::InvalidData`] if the message is too large, or
+/// other errors if the message could not be written to the stream.
 pub async fn send_response<T: Serialize>(
     send: &mut SendStream,
     buf: &mut Vec<u8>,
     body: T,
-) -> Result<(), frame::SendError> {
-    match frame::send(send, buf, body).await {
-        Ok(()) => Ok(()),
-        Err(frame::SendError::WriteError(e)) => Err(frame::SendError::WriteError(e)),
-        Err(e) => message::send_err(send, buf, e).await,
+) -> io::Result<()> {
+    if let Err(e) = frame::send(send, buf, body).await {
+        if e.kind() == io::ErrorKind::InvalidData {
+            message::send_err(send, buf, e).await
+        } else {
+            Err(e)
+        }
+    } else {
+        Ok(())
     }
 }

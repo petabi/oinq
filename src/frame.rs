@@ -4,7 +4,6 @@ use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 use std::{io, mem};
-use thiserror::Error;
 
 /// Receives and deserializes a message with a big-endian 4-byte length header.
 ///
@@ -132,32 +131,24 @@ fn from_transport_error_to_io_error(e: quinn_proto::TransportError) -> io::Error
     }
 }
 
-/// The error type for sending a message as a frame.
-#[derive(Debug, Error)]
-pub enum SendError {
-    #[error("message is too large")]
-    MessageTooLarge,
-    #[error("failed to write to a stream")]
-    WriteError(#[from] quinn::WriteError),
-}
-
 /// Sends a message as a stream of bytes with a big-endian 4-byte length header.
 ///
 /// `buf` will be cleared after the message is sent.
 ///
 /// # Errors
 ///
-/// * `SendError::MessageTooLarge`: if the message is too large
-/// * `SendError::WriteError`: if the message could not be written
-pub async fn send<T>(send: &mut SendStream, buf: &mut Vec<u8>, msg: T) -> Result<(), SendError>
+/// Returns [`std::io::ErrorKind::InvalidData`] if the message is too large, or
+/// other errors if the message could not be written to the stream.
+pub async fn send<T>(send: &mut SendStream, buf: &mut Vec<u8>, msg: T) -> io::Result<()>
 where
     T: Serialize,
 {
     buf.resize(mem::size_of::<u32>(), 0);
     bincode::DefaultOptions::new()
         .serialize_into(&mut *buf, &msg)
-        .map_err(|_| SendError::MessageTooLarge)?;
-    let len = u32::try_from(buf.len() - 4).map_err(|_| SendError::MessageTooLarge)?;
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let len =
+        u32::try_from(buf.len() - 4).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     buf[..mem::size_of::<u32>()].clone_from_slice(&len.to_be_bytes());
     send.write_all(buf).await?;
     buf.clear();
@@ -168,10 +159,10 @@ where
 ///
 /// # Errors
 ///
-/// * `SendError::MessageTooLarge`: if the message is too large
-/// * `SendError::WriteError`: if the message could not be written
-pub async fn send_raw(send: &mut SendStream, buf: &[u8]) -> Result<(), SendError> {
-    let len = u32::try_from(buf.len()).map_err(|_| SendError::MessageTooLarge)?;
+/// Returns an error if the message is too large or could not be written.
+pub async fn send_raw(send: &mut SendStream, buf: &[u8]) -> io::Result<()> {
+    let len =
+        u32::try_from(buf.len()).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     send.write_all(&len.to_be_bytes()).await?;
     send.write_all(buf).await?;
     Ok(())
