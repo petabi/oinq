@@ -2,10 +2,11 @@
 
 use std::io;
 
-use crate::{frame, message};
 use bincode::Options;
 use quinn::SendStream;
 use serde::{Deserialize, Serialize};
+
+use crate::{frame, message};
 
 /// Parses the arguments of a request.
 ///

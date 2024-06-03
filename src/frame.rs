@@ -1,9 +1,10 @@
 //! Functions and errors for handling length-delimited frames.
 
+use std::{io, mem};
+
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
-use std::{io, mem};
 
 /// Receives and deserializes a message with a big-endian 4-byte length header.
 ///

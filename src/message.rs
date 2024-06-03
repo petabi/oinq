@@ -1,10 +1,12 @@
 //! Functions and errors for handling messages.
 
-use crate::frame;
+use std::{fmt, io, mem};
+
 use bincode::Options;
 use quinn::{RecvStream, SendStream};
 use serde::Serialize;
-use std::{fmt, io, mem};
+
+use crate::frame;
 
 /// Receives a message as a stream of bytes with a big-endian 4-byte length
 /// header.

@@ -22,11 +22,13 @@ lazy_static! {
 /// Creates a bidirectional channel, returning server's send and receive and
 /// client's send and receive streams.
 pub(crate) async fn channel() -> Channel {
-    use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
     use std::{
         net::{IpAddr, Ipv6Addr, SocketAddr},
         sync::Arc,
     };
+
+    use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+
     const TEST_SERVER_NAME: &str = "test-server";
     const TEST_PORT: u16 = 60190;
 
