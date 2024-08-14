@@ -1,6 +1,7 @@
 //! Shared test code
 
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
+
 use quinn::{Connection, RecvStream, SendStream};
 use tokio::sync::Mutex;
 
@@ -15,9 +16,7 @@ pub(crate) struct Endpoint {
     pub(crate) recv: RecvStream,
 }
 
-lazy_static! {
-    pub(crate) static ref TOKEN: Mutex<u32> = Mutex::new(0);
-}
+pub(crate) static TOKEN: LazyLock<Mutex<u32>> = LazyLock::new(|| Mutex::new(0));
 
 /// Creates a bidirectional channel, returning server's send and receive and
 /// client's send and receive streams.
