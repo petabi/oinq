@@ -2,7 +2,7 @@
 name = "oinq"
 version = "0.13.0"
 edition = "2021"
-rust-version = "1.69"
+rust-version = "1.70"
 description = "The inter-agent communication protocol in the REview ecosystem"
 readme = "README.md"
 homepage = "https://github.com/petabi/oinq"
