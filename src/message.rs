@@ -104,10 +104,11 @@ mod tests {
 
     #[tokio::test]
     async fn send_and_recv() {
+        const CODE: u32 = 0x1234;
+
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        const CODE: u32 = 0x1234;
         let mut buf = Vec::new();
         super::send_request(&mut channel.server.send, &mut buf, CODE, ())
             .await
