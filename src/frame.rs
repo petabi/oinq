@@ -37,7 +37,7 @@ where
 /// # Errors
 ///
 /// Returns an error if the message could not be read.
-pub async fn recv_raw<'b>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> io::Result<()> {
+pub async fn recv_raw(recv: &mut RecvStream, buf: &mut Vec<u8>) -> io::Result<()> {
     let mut len_buf = [0; mem::size_of::<u32>()];
     if let Err(e) = recv.read_exact(&mut len_buf).await {
         return Err(from_read_exact_error_to_io_error(e));
