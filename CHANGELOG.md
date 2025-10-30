@@ -9,8 +9,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Updated the minimum supported Rust version (MSRV) to 1.70 due to tokio 1.39.2
-  requiring it.
+- Updated the minimum supported Rust version (MSRV) to 1.82 due to indexmap
+  2.12.0 requiring it.
 
 ## [0.13.0] - 2024-05-21
 
