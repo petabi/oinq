@@ -91,7 +91,7 @@ pub async fn send_raw(send: &mut SendStream, buf: &[u8]) -> io::Result<()> {
 mod tests {
     use serde::{Deserialize, Serialize};
 
-    use crate::test::{channel, TOKEN};
+    use crate::test::{TOKEN, channel};
 
     #[tokio::test]
     async fn send_and_recv() {

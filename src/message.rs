@@ -96,7 +96,7 @@ pub async fn send_err<E: fmt::Display>(
 #[cfg(test)]
 mod tests {
     use crate::frame;
-    use crate::test::{channel, TOKEN};
+    use crate::test::{TOKEN, channel};
 
     #[tokio::test]
     async fn send_and_recv() {

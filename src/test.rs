@@ -34,7 +34,7 @@ pub(crate) async fn channel() -> Channel {
     let cert =
         rcgen::generate_simple_self_signed([TEST_SERVER_NAME.to_string()]).expect("infallible");
     let cert_der = vec![CertificateDer::from(cert.cert)];
-    let key_der = PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());
+    let key_der = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
     let server_config = quinn::ServerConfig::with_single_cert(cert_der.clone(), key_der.into())
         .expect("infallible");
     let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), TEST_PORT);
