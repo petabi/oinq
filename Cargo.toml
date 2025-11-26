@@ -2,7 +2,7 @@
 name = "oinq"
 version = "0.13.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 description = "The inter-agent communication protocol in the REview ecosystem"
 readme = "README.md"
 homepage = "https://github.com/petabi/oinq"
@@ -10,7 +10,7 @@ repository = "https://github.com/petabi/oinq"
 license = "Apache-2.0"
 
 [dependencies]
-bincode = "1"
+bincode = { version = "2", features = ["serde"] }
 futures = "0.3"
 num_enum = "0.7"
 quinn = "0.11"
