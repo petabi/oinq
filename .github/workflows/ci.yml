@@ -19,7 +19,9 @@ jobs:
     - name: Clippy
       run: cargo clippy --tests -- -D warnings
     - name: markdownlint
-      uses: articulate/actions-markdownlint@v1
+      uses: DavidAnson/markdownlint-cli2-action@v24
+      with:
+        globs: "**/*.md"
 
   test:
     runs-on: ${{ matrix.os }}
