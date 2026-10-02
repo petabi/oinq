@@ -263,7 +263,7 @@ mod tests {
     fn parse_empty_vec() {
         let data: &[u8] = &[0x00];
         let result: Vec<u8> = parse_args(data).unwrap();
-        assert!(result.is_empty());
+        assert_eq!(result, [] as [u8; 0]);
     }
 
     #[test]

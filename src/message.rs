@@ -109,12 +109,12 @@ mod tests {
         super::send_request(&mut channel.server.send, &mut buf, CODE, ())
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
         let (code, body) = super::recv_request_raw(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
         assert_eq!(code, CODE);
-        assert!(body.is_empty());
+        assert_eq!(body, []);
     }
 
     #[tokio::test]
@@ -126,7 +126,7 @@ mod tests {
         super::send_ok(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
         let body: Result<&str, &str> = frame::recv(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
@@ -142,7 +142,7 @@ mod tests {
         super::send_err(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
         let body: Result<(), &str> = frame::recv(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
@@ -188,7 +188,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(code, 0xABCD);
-        assert!(body.is_empty());
+        assert_eq!(body, []);
     }
 
     #[tokio::test]
@@ -398,6 +398,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(code, 0xFFFF_FFFF);
-        assert!(body.is_empty());
+        assert_eq!(body, []);
     }
 }
