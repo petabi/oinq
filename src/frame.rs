@@ -120,7 +120,7 @@ mod tests {
         super::send(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
         let received = super::recv::<&str>(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
