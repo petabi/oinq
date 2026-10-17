@@ -26,7 +26,11 @@ pub(crate) async fn channel() -> Channel {
         sync::Arc,
     };
 
-    use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+    use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
+    use rustls::{
+        crypto::aws_lc_rs::{self, kx_group::X25519MLKEM768},
+        pki_types::{CertificateDer, PrivatePkcs8KeyDer},
+    };
 
     const TEST_SERVER_NAME: &str = "test-server";
     const TEST_PORT: u16 = 60190;
@@ -35,8 +39,20 @@ pub(crate) async fn channel() -> Channel {
         rcgen::generate_simple_self_signed([TEST_SERVER_NAME.to_string()]).expect("infallible");
     let cert_der = vec![CertificateDer::from(cert.cert)];
     let key_der = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
-    let server_config = quinn::ServerConfig::with_single_cert(cert_der.clone(), key_der.into())
+    // A successful handshake must use hybrid key exchange: no classical fallback is allowed.
+    let provider = Arc::new(rustls::crypto::CryptoProvider {
+        kx_groups: vec![X25519MLKEM768],
+        ..aws_lc_rs::default_provider()
+    });
+    let server_crypto = rustls::ServerConfig::builder_with_provider(provider.clone())
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("TLS 1.3 is supported")
+        .with_no_client_auth()
+        .with_single_cert(cert_der.clone(), key_der.into())
         .expect("infallible");
+    let server_config = quinn::ServerConfig::with_crypto(Arc::new(
+        QuicServerConfig::try_from(server_crypto).expect("invalid server config"),
+    ));
     let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), TEST_PORT);
 
     let server_endpoint = {
@@ -70,8 +86,14 @@ pub(crate) async fn channel() -> Channel {
 
     let mut root_cert_store = rustls::RootCertStore::empty();
     root_cert_store.add_parsable_certificates(cert_der);
-    let client_config = quinn::ClientConfig::with_root_certificates(Arc::new(root_cert_store))
-        .expect("invalid client config");
+    let client_crypto = rustls::ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("TLS 1.3 is supported")
+        .with_root_certificates(root_cert_store)
+        .with_no_client_auth();
+    let client_config = quinn::ClientConfig::new(Arc::new(
+        QuicClientConfig::try_from(client_crypto).expect("invalid client config"),
+    ));
     let client_endpoint =
         quinn::Endpoint::client(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)).unwrap();
     let client_connecting = client_endpoint
@@ -96,4 +118,10 @@ pub(crate) async fn channel() -> Channel {
             recv: client_recv,
         },
     }
+}
+
+#[tokio::test]
+async fn handshake_with_x25519mlkem768() {
+    // channel() allows only X25519MLKEM768 on both peers and awaits the handshake.
+    let _channel = channel().await;
 }
