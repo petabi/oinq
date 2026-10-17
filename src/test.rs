@@ -33,7 +33,6 @@ pub(crate) async fn channel() -> Channel {
     };
 
     const TEST_SERVER_NAME: &str = "test-server";
-    const TEST_PORT: u16 = 60190;
 
     let cert =
         rcgen::generate_simple_self_signed([TEST_SERVER_NAME.to_string()]).expect("infallible");
@@ -53,22 +52,13 @@ pub(crate) async fn channel() -> Channel {
     let server_config = quinn::ServerConfig::with_crypto(Arc::new(
         QuicServerConfig::try_from(server_crypto).expect("invalid server config"),
     ));
-    let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), TEST_PORT);
-
-    let server_endpoint = {
-        loop {
-            break match quinn::Endpoint::server(server_config.clone(), server_addr) {
-                Ok(e) => e,
-                Err(e) => {
-                    if e.kind() == tokio::io::ErrorKind::AddrInUse {
-                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-                    panic!("{}", e);
-                }
-            };
-        }
-    };
+    // Let the OS select an available port to avoid conflicts and reserved ports.
+    let server_endpoint = quinn::Endpoint::server(
+        server_config,
+        SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 0),
+    )
+    .unwrap();
+    let server_addr = server_endpoint.local_addr().unwrap();
 
     let handle = tokio::spawn(async move {
         let server_connection = match server_endpoint.accept().await {
