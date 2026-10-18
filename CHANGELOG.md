@@ -5,6 +5,18 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Owned Tokio `FramedReader` and `FramedWriter`, required `FrameLimit`, owned
+  `Frame`, and explicit framing errors, EOF, truncation, cancellation retention,
+  and poisoning semantics.
+- Capped serialization, bounded serde collection decoding, optional strict
+  whole-frame decoding, and explicit payload buffer recycling.
+- Generic wire fixtures and in-memory cancellation, limit, and transport tests,
+  plus local Quinn Tokio I/O coverage.
+
 ## [0.13.1] - 2025-11-26
 
 ### Changed
@@ -309,6 +321,7 @@ without relying on the content of the response.
 
 - `send_frame` and `recv_frame` to send and receive length-delimited frames.
 
+[Unreleased]: https://github.com/petabi/oinq/compare/0.13.1...main
 [0.13.1]: https://github.com/petabi/oinq/compare/0.13.0...0.13.1
 [0.13.0]: https://github.com/petabi/oinq/compare/0.12.0...0.13.0
 [0.12.0]: https://github.com/petabi/oinq/compare/0.11.0...0.12.0

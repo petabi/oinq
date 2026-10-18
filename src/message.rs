@@ -1,4 +1,11 @@
 //! Functions and errors for handling messages.
+//!
+//! Requests use a four-byte big-endian frame length, followed by a four-byte
+//! little-endian request code and a body serialized using bincode 2's standard
+//! configuration with serde. [`recv_request_raw`] returns the code and remaining
+//! body bytes separately. Responses encode a `Result` using the same bincode
+//! configuration. These helpers retain their existing wire format and use the
+//! original Quinn framing functions; bounded framing is available in [`frame`].
 
 use std::{fmt, io, mem};
 
