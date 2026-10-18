@@ -9,6 +9,9 @@ use crate::{frame, message};
 
 /// Parses the arguments of a request.
 ///
+/// Uses bincode 2's standard configuration with serde. The result may borrow
+/// from `args`, and trailing bytes after the decoded value are permitted.
+///
 /// # Errors
 ///
 /// Returns an error if the arguments could not be deserialized.

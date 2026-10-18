@@ -1,7 +1,81 @@
-//! Functions and errors for handling length-delimited frames.
+//! Length-delimited framing with a four-byte big-endian payload length.
+//!
+//! [`FramedReader`] and [`FramedWriter`] own generic Tokio I/O and require a
+//! caller-selected [`FrameLimit`]. Quinn streams implement the required Tokio
+//! traits directly. The original Quinn free functions remain available with
+//! their existing signatures and wire behavior; bounded framing is opt-in.
+//!
+//! # Limits and decoding
+//!
+//! Protocol implementations choose a required payload limit, excluding the
+//! four-byte header. Zero-length payloads are valid; limits above `u32::MAX`
+//! are rejected. Readers check incoming declarations before growing the payload
+//! buffer. Writers check raw payload sizes and cap serialization before sending
+//! any header bytes.
+//!
+//! Serialized bodies use bincode 2's standard configuration with serde.
+//! [`Frame::decode`] permits trailing bytes for prefix decoding;
+//! [`Frame::decode_strict`] requires the entire payload to be consumed.
+//! Both apply the configured limit to collection allocation claims and
+//! string/byte storage, including nested collections. This conservative budget
+//! can reject values whose in-memory representation exceeds their encoded size;
+//! choose a limit that accommodates both. Custom `Deserialize` implementations
+//! remain responsible for their own allocations. Decode errors affect only the
+//! owned frame; the reader remains aligned for the next frame.
+//!
+//! # Ownership and buffer reuse
+//!
+//! Each read returns an owned [`Frame`]. Decoded values may borrow from it, and
+//! subsequent reads do not invalidate its bytes. Return its allocation with
+//! [`Frame::into_bytes`] and [`FramedReader::recycle`] between frames to reuse
+//! it; without recycling, the next frame gets a new buffer. Writers retain and
+//! reuse their serialization buffer.
+//!
+//! # EOF, errors, and cancellation
+//!
+//! [`FramedReader::read`] returns `None` for EOF before a new header, and
+//! [`FrameError::Truncated`] for EOF within a header or payload. Transport
+//! errors preserve their original [`std::io::Error`] and source, including Quinn
+//! reset details. Read errors, including an excessive declaration, poison the
+//! reader. Write and flush I/O errors poison the writer. Later operations return
+//! [`FrameError::Poisoned`] to prevent reuse after framing alignment is lost.
+//! Serialization and outgoing size errors occur before I/O and leave the writer
+//! usable.
+//!
+//! Cancelling a read or flush future retains partial progress in the object.
+//! Resume with [`FramedReader::read`] or [`FramedWriter::flush`]. A pending write
+//! cannot be replaced, even with identical bytes. Cancellation does not abort an
+//! application exchange. Dropping a framed object drops its I/O object; generic
+//! Tokio I/O alone cannot guarantee a QUIC reset. Extracting the I/O with
+//! `into_inner` discards framing state, so callers must account for partial frames.
+//!
+//! # Example
+//!
+//! ```
+//! # async fn example() -> Result<(), oinq::frame::FrameError> {
+//! use oinq::frame::{FrameLimit, FramedReader, FramedWriter};
+//!
+//! let limit = FrameLimit::new(1024)?; // Caller-selected example policy.
+//! let mut writer = FramedWriter::new(Vec::new(), limit);
+//! writer.start("hello")?;
+//! writer.flush().await?; // Resume this method if the future is cancelled.
+//! let bytes = writer.into_inner();
+//! let mut reader = FramedReader::new(bytes.as_slice(), limit);
+//! if let Some(frame) = reader.read().await? {
+//!     assert_eq!(frame.decode_strict::<&str>()?, "hello");
+//!     reader.recycle(frame.into_bytes())?;
+//! }
+//! assert!(reader.read().await?.is_none());
+//! # Ok(())
+//! # }
+//! ```
+
+mod bounded;
+mod decode;
 
 use std::{io, mem};
 
+pub use bounded::{Frame, FrameError, FrameLimit, FramePart, FramedReader, FramedWriter};
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +83,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// `buf` will be filled with the message data excluding the 4-byte length
 /// header.
+/// Deserialization uses bincode 2's standard configuration with serde and
+/// permits trailing bytes after the decoded value.
 ///
 /// # Errors
 ///
