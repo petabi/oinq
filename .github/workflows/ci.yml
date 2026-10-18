@@ -18,6 +18,12 @@ jobs:
       run: cargo fmt -- --check --config group_imports=StdExternalCrate
     - name: Clippy
       run: cargo clippy --tests -- -D warnings
+    - name: Compile consumer without a direct Quinn dependency
+      run: cargo check --manifest-path tests/fixtures/normal-api/Cargo.toml
+    - name: Feature matrix
+      run: |
+        cargo check --no-default-features
+        cargo check --all-features
     - name: markdownlint
       uses: DavidAnson/markdownlint-cli2-action@v24
       with:

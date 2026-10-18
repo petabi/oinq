@@ -9,6 +9,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Owned Quinn-backed endpoint, establishment, connection, and Tokio stream
+  wrappers with checked application codes, transport options, structured errors,
+  and typed peer certificate chains. Normal API signatures do not expose Quinn.
+- Caller-supplied rustls verification and crypto policy, prebound UDP sockets,
+  server TLS reload for future sessions, explicit close and endpoint idleness.
+- Local mTLS, stream abort, cancellation, ownership, and configuration reload
+  tests plus an external consumer fixture without a direct Quinn dependency.
 - Owned Tokio `FramedReader` and `FramedWriter`, required `FrameLimit`, owned
   `Frame`, and explicit framing errors, EOF, truncation, cancellation retention,
   and poisoning semantics.
