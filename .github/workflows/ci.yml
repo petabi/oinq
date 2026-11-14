@@ -41,7 +41,9 @@ jobs:
     - name: markdownlint
       uses: DavidAnson/markdownlint-cli2-action@v24
       with:
-        globs: "**/*.md"
+        globs: |
+          **/*.md
+          !CHANGELOG.md
 
   test:
     runs-on: ${{ matrix.os }}
