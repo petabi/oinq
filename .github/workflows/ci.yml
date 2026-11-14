@@ -1,6 +1,17 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch or commit to validate
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -10,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.ref || github.sha }}
+        persist-credentials: false
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
@@ -36,6 +50,9 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
     - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.ref || github.sha }}
+        persist-credentials: false
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
     - name: Build
@@ -47,6 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.ref || github.sha }}
+        persist-credentials: false
     - name: Install Rust
       uses: dtolnay/rust-toolchain@1.85
     - name: Build
@@ -56,6 +76,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.ref || github.sha }}
+        persist-credentials: false
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
     - name: Install cargo-llvm-cov

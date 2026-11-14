@@ -1,0 +1,76 @@
+name: Changelog policy
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+  workflow_call:
+    inputs:
+      pull_request_number:
+        description: Pull request to inspect
+        required: true
+        type: number
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Pull request to inspect
+        required: true
+        type: number
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: changelog-${{ inputs.pull_request_number || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check changelog ownership
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ inputs.pull_request_number || github.event.pull_request.number }}
+        with:
+          script: |
+            const pull_number = Number(process.env.PR_NUMBER);
+            if (!Number.isSafeInteger(pull_number) || pull_number <= 0) {
+              throw new Error('A valid pull request number is required.');
+            }
+            const params = { ...context.repo, pull_number };
+            const { data: pr } = await github.rest.pulls.get(params);
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...params,
+              per_page: 100,
+            });
+            // GitHub caps this endpoint at 3,000 files. Never silently miss edits.
+            if (files.length !== pr.changed_files) {
+              throw new Error('Could not inspect every changed file; review the diff manually.');
+            }
+            const changed = files.some(file =>
+              file.filename === 'CHANGELOG.md' || file.previous_filename === 'CHANGELOG.md'
+            );
+            const releasePr = pr.user.login === 'github-actions[bot]' &&
+              pr.user.type === 'Bot' &&
+              pr.head.repo?.full_name === pr.base.repo.full_name &&
+              pr.head.ref.startsWith('release-plz-') &&
+              pr.base.ref === pr.base.repo.default_branch;
+            const manual = pr.labels.some(label => label.name === 'changelog');
+            let message;
+            if (!changed) {
+              message = 'No CHANGELOG.md changes. No exception is needed.';
+            } else if (releasePr) {
+              message = 'Recognized release-plz PR. Review the generated notes before merging.';
+            } else if (manual) {
+              message = 'Manual changelog exception requested. A maintainer must review the reason and current diff and record approval before merging. The label is not approval.';
+              core.warning(message);
+            } else {
+              message = 'Release-plz generates CHANGELOG.md. Remove this edit and describe the change in your Conventional Commit PR title. For an intentional correction, explain why in the PR description, add the "changelog" label, and obtain maintainer review.';
+              core.setFailed(message);
+            }
+            await core.summary
+              .addHeading('Advisory changelog policy')
+              .addRaw(message)
+              .addBreak()
+              .addRaw('This check does not authorize an exception or enforce merge restrictions. Maintainers review exceptions; no branch protection or ruleset is configured by this workflow.')
+              .write();

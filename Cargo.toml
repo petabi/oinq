@@ -8,6 +8,7 @@ readme = "README.md"
 homepage = "https://github.com/petabi/oinq"
 repository = "https://github.com/petabi/oinq"
 license = "Apache-2.0"
+publish = false
 
 [dependencies]
 bincode = { version = "2", features = ["serde"] }

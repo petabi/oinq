@@ -1,0 +1,83 @@
+name: Release-plz
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-plz-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ github.sha }}
+    secrets: inherit
+
+  release:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        with:
+          command: release
+          version: 0.4.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-pr:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      pr: ${{ steps.release-plz.outputs.pr }}
+      prs_created: ${{ steps.release-plz.outputs.prs_created }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        id: release-plz
+        with:
+          command: release-pr
+          version: 0.4.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check-release-pr:
+    needs: release-pr
+    if: needs.release-pr.outputs.prs_created == 'true'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ fromJSON(needs.release-pr.outputs.pr).head_branch }}
+    secrets: inherit
+
+  check-release-changelog:
+    needs: release-pr
+    if: needs.release-pr.outputs.prs_created == 'true'
+    uses: ./.github/workflows/changelog.yml
+    permissions:
+      pull-requests: read
+    with:
+      pull_request_number: ${{ fromJSON(needs.release-pr.outputs.pr).number }}
