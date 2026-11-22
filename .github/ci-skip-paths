@@ -1,0 +1,9 @@
+# Paths that do not affect formatting, Clippy, the build, or tests.
+# `*` does not match `/`. A path that is not listed runs the Rust checks.
+# Workflows, actions, and scripts are not listed: changing them should still
+# exercise the Rust jobs. tests/fixtures are not listed either.
+**/*.md
+.github/ci-skip-paths
+.github/dependabot.yml
+.gitignore
+release-plz.toml

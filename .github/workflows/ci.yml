@@ -1,8 +1,14 @@
 name: CI
 
+# Pull requests, pushes to main, and manual runs. A branch with no pull
+# request does not run CI on push. Release-plz waits for this workflow on
+# main instead of running these checks again.
+# `on.push.branches` cannot be an expression, so name the default branch here.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
   workflow_call:
     inputs:
       ref:
@@ -10,10 +16,24 @@ on:
         required: true
         type: string
 
+# A newer push to the same ref cancels the older run. A manual dispatch and a
+# re-run (`run_attempt` above 1) get a group of their own, so a later push
+# does not cancel them. Reusable calls have a separate namespace, target ref,
+# caller run ID, and attempt: they cannot cancel ordinary CI or another caller.
+concurrency:
+  group: >-
+    ${{ inputs.ref != ''
+        && format('ci-call-{0}-{1}-{2}-{3}', github.repository, inputs.ref, github.run_id, github.run_attempt)
+        || format('ci-event-{0}-{1}{2}', github.workflow, github.ref,
+          github.event_name == 'workflow_dispatch' && '-dispatch'
+          || (github.run_attempt != '1' && format('-rerun-{0}', github.run_id) || '')) }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 env:
+  CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -22,22 +42,42 @@ jobs:
     steps:
     - uses: actions/checkout@v6
       with:
+        # Full history so the base and head commits are present for the skip
+        # decision. A reusable call checks out one commit and always runs the
+        # Rust checks.
+        fetch-depth: ${{ inputs.ref != '' && 1 || 0 }}
         ref: ${{ inputs.ref || github.sha }}
         persist-credentials: false
+    - name: Decide whether to run the Rust checks
+      id: gate
+      uses: ./.github/actions/cargo-gate
+      with:
+        call-ref: ${{ inputs.ref }}
     - name: Install Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: dtolnay/rust-toolchain@stable
       with:
         components: clippy, rustfmt
+    - name: Cache Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: check
+        save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Check formatting
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       run: cargo fmt -- --check --config group_imports=StdExternalCrate
     - name: Clippy
-      run: cargo clippy --tests -- -D warnings
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      run: cargo clippy --locked --tests -- -D warnings
     - name: Compile consumer without a direct Quinn dependency
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       run: cargo check --manifest-path tests/fixtures/normal-api/Cargo.toml
     - name: Feature matrix
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       run: |
-        cargo check --no-default-features
-        cargo check --all-features
+        cargo check --locked --no-default-features
+        cargo check --locked --all-features
     - name: markdownlint
       uses: DavidAnson/markdownlint-cli2-action@v24
       with:
@@ -53,43 +93,88 @@ jobs:
     steps:
     - uses: actions/checkout@v6
       with:
+        fetch-depth: ${{ inputs.ref != '' && 1 || 0 }}
         ref: ${{ inputs.ref || github.sha }}
         persist-credentials: false
+    - name: Decide whether to run the Rust checks
+      id: gate
+      uses: ./.github/actions/cargo-gate
+      with:
+        call-ref: ${{ inputs.ref }}
     - name: Install Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: dtolnay/rust-toolchain@stable
+    - name: Cache Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test-${{ matrix.os }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Build
-      run: cargo build --verbose
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      run: cargo build --locked --verbose
     - name: Run tests
-      run: cargo test --verbose
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      run: cargo test --locked --verbose
 
   msrv:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
       with:
+        fetch-depth: ${{ inputs.ref != '' && 1 || 0 }}
         ref: ${{ inputs.ref || github.sha }}
         persist-credentials: false
+    - name: Decide whether to run the Rust checks
+      id: gate
+      uses: ./.github/actions/cargo-gate
+      with:
+        call-ref: ${{ inputs.ref }}
     - name: Install Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: dtolnay/rust-toolchain@1.85
+    - name: Cache Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: msrv
+        save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Build
-      run: cargo build --verbose
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      run: cargo build --locked --verbose
 
   coverage:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
       with:
+        fetch-depth: ${{ inputs.ref != '' && 1 || 0 }}
         ref: ${{ inputs.ref || github.sha }}
         persist-credentials: false
+    - name: Decide whether to run the Rust checks
+      id: gate
+      uses: ./.github/actions/cargo-gate
+      with:
+        call-ref: ${{ inputs.ref }}
     - name: Install Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: dtolnay/rust-toolchain@stable
+    - name: Cache Rust
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: coverage
+        save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Install cargo-llvm-cov
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: taiki-e/install-action@v2
       with:
         tool: cargo-llvm-cov
     - name: Generate code coverage
-      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
+      run: cargo llvm-cov --locked --all-features --workspace --lcov --output-path lcov.info
     - name: Update coverage to Codecov
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: codecov/codecov-action@v4
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
