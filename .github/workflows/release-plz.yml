@@ -1,7 +1,17 @@
 name: Release-plz
 
+# Assumes a push to main has already run CI. Release that commit only when
+# the run succeeded and the commit is still the tip of main. A failed run
+# fails this workflow. A manual dispatch calls CI first.
+#
+# Release PRs are opened with GITHUB_TOKEN, so pull_request workflows on those
+# PRs need a writer to approve them. This workflow therefore validates the
+# release branch itself via workflow_call (check-release-pr) instead of relying
+# on the pull_request event. A GitHub App is not required for that path.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -13,7 +23,7 @@ concurrency:
 
 jobs:
   check:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
@@ -21,8 +31,38 @@ jobs:
       ref: ${{ github.sha }}
     secrets: inherit
 
+  blocked:
+    name: CI failed
+    if: >-
+      ${{ github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'failure' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop before release
+        env:
+          CI_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_URL: ${{ github.event.workflow_run.html_url }}
+        shell: bash
+        run: |
+          set -eu
+          echo "CI failed for $CI_SHA ($CI_URL). Release-plz will not run."
+          exit 1
+
   release:
     needs: check
+    if: >-
+      ${{ always() && !cancelled() && (
+        (github.event_name == 'workflow_dispatch' && needs.check.result == 'success') ||
+        (github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          github.event.workflow_run.head_sha == github.sha)
+      ) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33,6 +73,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-plz
+          save-if: false
       - uses: release-plz/action@v0.5
         with:
           command: release
@@ -55,6 +99,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-plz
+          save-if: false
       - uses: release-plz/action@v0.5
         id: release-plz
         with:
