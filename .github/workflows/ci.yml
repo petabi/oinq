@@ -69,15 +69,15 @@ jobs:
       run: cargo fmt -- --check --config group_imports=StdExternalCrate
     - name: Clippy
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
-      run: cargo clippy --locked --tests -- -D warnings
+      run: cargo clippy --tests -- -D warnings
     - name: Compile consumer without a direct Quinn dependency
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       run: cargo check --manifest-path tests/fixtures/normal-api/Cargo.toml
     - name: Feature matrix
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       run: |
-        cargo check --locked --no-default-features
-        cargo check --locked --all-features
+        cargo check --no-default-features
+        cargo check --all-features
     - name: markdownlint
       uses: DavidAnson/markdownlint-cli2-action@v24
       with:
@@ -112,10 +112,10 @@ jobs:
         save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Build
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
-      run: cargo build --locked --verbose
+      run: cargo build --verbose
     - name: Run tests
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
-      run: cargo test --locked --verbose
+      run: cargo test --verbose
 
   msrv:
     runs-on: ubuntu-latest
@@ -141,7 +141,7 @@ jobs:
         save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Build
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
-      run: cargo build --locked --verbose
+      run: cargo build --verbose
 
   coverage:
     runs-on: ubuntu-latest
@@ -172,7 +172,7 @@ jobs:
         tool: cargo-llvm-cov
     - name: Generate code coverage
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
-      run: cargo llvm-cov --locked --all-features --workspace --lcov --output-path lcov.info
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
     - name: Update coverage to Codecov
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: codecov/codecov-action@v4
