@@ -48,6 +48,22 @@
 //! # }
 //! ```
 //!
+//! # Connection closure details
+//!
+//! [`Connection::closed`] reports a [`CloseInfo`]. Application and local closes
+//! carry checked application codes or no payload. Transport failures carry a
+//! [`TransportError`]; when the failure is connection-level,
+//! [`TransportError::transport_close`] returns a [`TransportClose`] with the
+//! checked QUIC transport code, a typed [`rustls::AlertDescription`] for
+//! cryptographic closes, and a category distinguishing crypto, timeout, reset,
+//! version mismatch, connection-ID exhaustion, and other transport closures.
+//! [`CloseInfo::transport_close`] reaches the same details from the closure
+//! report directly.
+//!
+//! Close reports describe observed transport state only. They do not prove that
+//! the peer processed application data, observed a stream FIN, or completed an
+//! application-level exchange.
+//!
 //! # Quinn interoperability
 //!
 //! These wrappers do not expose raw Quinn handles. The legacy helpers in
@@ -66,7 +82,7 @@ use std::{
     time::Duration,
 };
 
-use rustls::pki_types::CertificateDer;
+use rustls::{AlertDescription, pki_types::CertificateDer};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// A checked QUIC application error code (0 through 2^62 - 1).
@@ -98,6 +114,46 @@ impl ApplicationCode {
     }
 }
 
+/// A checked QUIC transport error code (0 through 2^62 - 1).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TransportCode(u64);
+
+impl TransportCode {
+    /// Largest transport error code representable by QUIC.
+    pub const MAX: u64 = (1 << 62) - 1;
+
+    /// Checks the QUIC transport-code range.
+    ///
+    /// # Errors
+    /// Returns an invalid-option error for values above [`Self::MAX`].
+    pub fn new(value: u64) -> Result<Self, TransportError> {
+        varint(value)?;
+        Ok(Self(value))
+    }
+
+    /// Returns the checked transport error code.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// Returns the TLS alert encoded by a cryptographic transport code.
+    ///
+    /// QUIC encodes alert `A` as transport code `0x100 + A`; codes outside that
+    /// range return `None`.
+    #[must_use]
+    pub fn tls_alert(self) -> Option<AlertDescription> {
+        crypto_alert(self.0)
+    }
+}
+
+const CRYPTO_ERROR_BASE: u64 = 0x100;
+
+fn crypto_alert(code: u64) -> Option<AlertDescription> {
+    let alert = u8::try_from(code.checked_sub(CRYPTO_ERROR_BASE)?).ok()?;
+    Some(AlertDescription::from(alert))
+}
+
 /// Broad categories that do not depend on the transport implementation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -116,10 +172,122 @@ pub enum TransportErrorKind {
     Stream,
 }
 
+/// Category of a connection-level QUIC transport close.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum TransportCloseKind {
+    /// A cryptographic handshake failure; see [`TransportClose::tls_alert`].
+    Crypto,
+    /// No traffic arrived before the negotiated idle timeout.
+    TimedOut,
+    /// The peer reset the connection without a `CONNECTION_CLOSE` frame.
+    Reset,
+    /// The endpoints do not support a common QUIC version.
+    VersionMismatch,
+    /// The local endpoint exhausted its connection-ID space.
+    ConnectionIdExhausted,
+    /// Any other transport-level closure, usually with a QUIC transport code.
+    Other,
+}
+
+/// Structured details of a connection-level QUIC transport close.
+///
+/// Returned by [`TransportError::transport_close`] for connection-level
+/// failures, including the [`TransportError`] inside [`CloseInfo::Transport`].
+/// The value is owned by oinq and exposes no Quinn types. [`Self::kind`]
+/// distinguishes cryptographic, timeout, reset, version, connection-ID, and
+/// other transport closures. [`Self::tls_alert`] returns a typed
+/// [`rustls::AlertDescription`] for cryptographic closes, and [`Self::code`]
+/// retains the checked QUIC transport code whenever one was supplied.
+///
+/// The details describe observed transport state only. They do not guarantee
+/// that the peer processed application data, observed a stream FIN, or
+/// completed any application-level exchange.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransportClose {
+    kind: TransportCloseKind,
+    code: Option<TransportCode>,
+    alert: Option<AlertDescription>,
+    reason: Vec<u8>,
+}
+
+impl TransportClose {
+    /// Returns the close category.
+    #[must_use]
+    pub const fn kind(&self) -> TransportCloseKind {
+        self.kind
+    }
+
+    /// Returns the QUIC transport error code supplied with the close, if any.
+    #[must_use]
+    pub const fn code(&self) -> Option<TransportCode> {
+        self.code
+    }
+
+    /// Returns the TLS alert for a cryptographic close, if any.
+    #[must_use]
+    pub const fn tls_alert(&self) -> Option<AlertDescription> {
+        self.alert
+    }
+
+    /// Returns the uninterpreted reason bytes supplied with the close.
+    #[must_use]
+    pub fn reason(&self) -> &[u8] {
+        &self.reason
+    }
+
+    fn from_code(code: u64, reason: Vec<u8>) -> Self {
+        let alert = crypto_alert(code);
+        Self {
+            kind: if alert.is_some() {
+                TransportCloseKind::Crypto
+            } else {
+                TransportCloseKind::Other
+            },
+            code: TransportCode::new(code).ok(),
+            alert,
+            reason,
+        }
+    }
+
+    fn simple(kind: TransportCloseKind) -> Self {
+        Self {
+            kind,
+            code: None,
+            alert: None,
+            reason: Vec::new(),
+        }
+    }
+
+    fn from_quinn(error: &quinn::ConnectionError) -> Option<Self> {
+        use quinn::ConnectionError;
+        match error {
+            ConnectionError::VersionMismatch => {
+                Some(Self::simple(TransportCloseKind::VersionMismatch))
+            }
+            ConnectionError::TransportError(error) => Some(Self::from_code(
+                u64::from(error.code),
+                error.reason.clone().into_bytes(),
+            )),
+            ConnectionError::ConnectionClosed(error) => Some(Self::from_code(
+                u64::from(error.error_code),
+                error.reason.to_vec(),
+            )),
+            ConnectionError::Reset => Some(Self::simple(TransportCloseKind::Reset)),
+            ConnectionError::TimedOut => Some(Self::simple(TransportCloseKind::TimedOut)),
+            ConnectionError::CidsExhausted => {
+                Some(Self::simple(TransportCloseKind::ConnectionIdExhausted))
+            }
+            ConnectionError::ApplicationClosed(_) | ConnectionError::LocallyClosed => None,
+        }
+    }
+}
+
 /// Structured operation failure, retaining the original error as its source.
 #[derive(Debug)]
 pub struct TransportError {
     kind: TransportErrorKind,
+    close: Option<TransportClose>,
     source: Box<dyn Error + Send + Sync>,
 }
 
@@ -130,9 +298,34 @@ impl TransportError {
         self.kind
     }
 
+    /// Returns structured transport-close details for connection-level failures.
+    ///
+    /// This is `Some` when the transport reported a connection close, such as a
+    /// TLS handshake rejection, idle timeout, reset, or a peer
+    /// `CONNECTION_CLOSE` frame. It is `None` for option validation, TLS
+    /// configuration, socket, and stream-local failures that do not describe a
+    /// connection close.
+    #[must_use]
+    pub fn transport_close(&self) -> Option<&TransportClose> {
+        self.close.as_ref()
+    }
+
     fn new(kind: TransportErrorKind, source: impl Error + Send + Sync + 'static) -> Self {
         Self {
             kind,
+            close: None,
+            source: Box::new(source),
+        }
+    }
+
+    fn with_close(
+        kind: TransportErrorKind,
+        close: Option<TransportClose>,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            kind,
+            close,
             source: Box::new(source),
         }
     }
@@ -407,7 +600,15 @@ fn io_error(e: io::Error) -> TransportError {
     TransportError::new(TransportErrorKind::Io, e)
 }
 fn connection_error(e: quinn::ConnectionError) -> TransportError {
-    TransportError::new(TransportErrorKind::Connection, e)
+    let close = TransportClose::from_quinn(&e);
+    TransportError::with_close(TransportErrorKind::Connection, close, e)
+}
+fn stopped_error(e: quinn::StoppedError) -> TransportError {
+    let close = match &e {
+        quinn::StoppedError::ConnectionLost(error) => TransportClose::from_quinn(error),
+        quinn::StoppedError::ZeroRttRejected => None,
+    };
+    TransportError::with_close(TransportErrorKind::Stream, close, e)
 }
 
 /// Owned establishment future. It can outlive the endpoint handle that accepted it.
@@ -439,7 +640,24 @@ pub enum CloseInfo {
     /// The local application closed the connection or endpoint.
     Local,
     /// Closure due to a transport failure, including timeout or peer transport errors.
+    /// The contained [`TransportError::transport_close`] carries structured details
+    /// when the transport supplies them.
     Transport(TransportError),
+}
+
+impl CloseInfo {
+    /// Returns structured transport-close details for [`Self::Transport`].
+    ///
+    /// Returns `None` for application and local closes, which carry no transport
+    /// error. This is the same value as [`TransportError::transport_close`] on
+    /// the contained error.
+    #[must_use]
+    pub fn transport_close(&self) -> Option<&TransportClose> {
+        match self {
+            Self::Transport(error) => error.transport_close(),
+            _ => None,
+        }
+    }
 }
 
 /// Clones refer to the same connection. Concurrent acceptors compete for streams;
@@ -571,6 +789,11 @@ impl Connection {
     }
 
     /// Waits for closure; cancellation does not close the connection.
+    ///
+    /// A [`CloseInfo::Transport`] report carries a [`TransportError`] whose
+    /// [`TransportError::transport_close`] distinguishes cryptographic, timeout,
+    /// reset, version, connection-ID, and other transport closures. Closure
+    /// reports do not imply that the peer processed application data.
     pub async fn closed(&self) -> CloseInfo {
         match self.state.connection.closed().await {
             quinn::ConnectionError::ApplicationClosed(v) => CloseInfo::Application {
@@ -631,7 +854,7 @@ impl SendStream {
             .stopped()
             .await
             .map(|v| v.map(|v| ApplicationCode(v.into_inner())))
-            .map_err(|e| TransportError::new(TransportErrorKind::Stream, e))
+            .map_err(stopped_error)
     }
 }
 

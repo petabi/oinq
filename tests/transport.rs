@@ -1,17 +1,73 @@
 use std::{error::Error, future::Future, net::UdpSocket, sync::Arc, time::Duration};
 
 use oinq::{
-    ApplicationCode, CloseInfo, Connection, Endpoint, TransportErrorKind, TransportOptions,
+    ApplicationCode, CloseInfo, Connection, Endpoint, TransportCloseKind, TransportCode,
+    TransportError, TransportErrorKind, TransportOptions,
     frame::{FrameError, FrameLimit, FramedReader, FramedWriter},
 };
 use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
 use rustls::{
-    ClientConfig, RootCertStore, ServerConfig,
+    AlertDescription, ClientConfig, DigitallySignedStruct, DistinguishedName, RootCertStore,
+    ServerConfig, SignatureScheme,
+    client::danger::HandshakeSignatureValid,
     crypto::aws_lc_rs::{self, kx_group::X25519MLKEM768},
-    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
-    server::WebPkiClientVerifier,
+    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, UnixTime},
+    server::{
+        WebPkiClientVerifier,
+        danger::{ClientCertVerified, ClientCertVerifier},
+    },
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+#[derive(Debug)]
+struct RejectClientCertificates(Arc<dyn ClientCertVerifier>);
+
+impl ClientCertVerifier for RejectClientCertificates {
+    fn offer_client_auth(&self) -> bool {
+        self.0.offer_client_auth()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        self.0.client_auth_mandatory()
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        self.0.root_hint_subjects()
+    }
+
+    fn verify_client_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: UnixTime,
+    ) -> Result<ClientCertVerified, rustls::Error> {
+        Err(rustls::Error::General(
+            "client certificate rejected by test policy".into(),
+        ))
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.0.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.0.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
+}
 
 struct Identity {
     chain: Vec<CertificateDer<'static>>,
@@ -72,6 +128,21 @@ impl Pki {
                 .with_protocol_versions(&[&rustls::version::TLS13])
                 .expect("test operation succeeds")
                 .with_client_cert_verifier(verifier)
+                .with_single_cert(self.server.chain.clone(), self.server.key.clone_key())
+                .expect("test operation succeeds"),
+        )
+    }
+
+    fn rejecting_server_config(&self) -> Arc<ServerConfig> {
+        let verifier =
+            WebPkiClientVerifier::builder_with_provider(self.roots.clone(), Self::provider())
+                .build()
+                .expect("test operation succeeds");
+        Arc::new(
+            ServerConfig::builder_with_provider(Self::provider())
+                .with_protocol_versions(&[&rustls::version::TLS13])
+                .expect("test operation succeeds")
+                .with_client_cert_verifier(Arc::new(RejectClientCertificates(verifier)))
                 .with_single_cert(self.server.chain.clone(), self.server.key.clone_key())
                 .expect("test operation succeeds"),
         )
@@ -194,6 +265,158 @@ async fn mtls_streams_framing_and_completion() {
         client.close(ApplicationCode::default(), b"");
         tokio::join!(server.wait_idle(), client.wait_idle());
     }).await;
+}
+
+#[tokio::test]
+async fn mtls_rejection_reports_crypto_alert() {
+    bounded(async {
+        let pki = Pki::new();
+        let server = Endpoint::server_with_socket(
+            pki.server_config(pki.roots.clone()),
+            socket(),
+            TransportOptions::default(),
+        )
+        .expect("test operation succeeds");
+        let anonymous = Endpoint::client(
+            pki.client_config(false),
+            "127.0.0.1:0".parse().expect("test operation succeeds"),
+            TransportOptions::default(),
+        )
+        .expect("test operation succeeds");
+        let (connected, accepted) = attempt(&server, &anonymous, "localhost").await;
+        let error = accepted.expect_err("server rejects missing client certificate");
+        assert_eq!(error.kind(), TransportErrorKind::Connection);
+        assert_crypto_close(&error, AlertDescription::CertificateRequired);
+        assert!(error.source().is_some());
+        match connected {
+            Ok(c) => {
+                let info = c.closed().await;
+                let close = info
+                    .transport_close()
+                    .expect("peer close carries transport detail");
+                assert_eq!(close.kind(), TransportCloseKind::Crypto);
+                assert_eq!(
+                    close.tls_alert(),
+                    Some(AlertDescription::CertificateRequired)
+                );
+                assert_eq!(
+                    close.code().map(TransportCode::get),
+                    Some(0x100 + u64::from(u8::from(AlertDescription::CertificateRequired)))
+                );
+            }
+            Err(error) => assert_crypto_close(&error, AlertDescription::CertificateRequired),
+        }
+        anonymous.close(ApplicationCode::default(), b"");
+        server.close(ApplicationCode::default(), b"");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn rejected_client_certificate_reports_handshake_failure() {
+    bounded(async {
+        let pki = Pki::new();
+        let server = Endpoint::server_with_socket(
+            pki.rejecting_server_config(),
+            socket(),
+            TransportOptions::default(),
+        )
+        .expect("test operation succeeds");
+        let client = Endpoint::client_with_socket(
+            pki.client_config(true),
+            socket(),
+            TransportOptions::default(),
+        )
+        .expect("test operation succeeds");
+        let (connected, accepted) = attempt(&server, &client, "localhost").await;
+        let error = accepted.expect_err("server rejects the client certificate");
+        assert_crypto_close(&error, AlertDescription::HandshakeFailure);
+        match connected {
+            Ok(c) => {
+                let info = c.closed().await;
+                let close = info
+                    .transport_close()
+                    .expect("peer close carries transport detail");
+                assert_eq!(close.kind(), TransportCloseKind::Crypto);
+                assert_eq!(close.tls_alert(), Some(AlertDescription::HandshakeFailure));
+            }
+            Err(error) => assert_crypto_close(&error, AlertDescription::HandshakeFailure),
+        }
+        server.close(ApplicationCode::default(), b"");
+        client.close(ApplicationCode::default(), b"");
+        tokio::join!(server.wait_idle(), client.wait_idle());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn idle_timeout_reports_non_crypto_close() {
+    bounded(async {
+        let pki = Pki::new();
+        let options = TransportOptions {
+            idle_timeout: Some(Duration::from_millis(250)),
+            ..TransportOptions::default()
+        };
+        let server = Endpoint::server_with_socket(
+            pki.server_config(pki.roots.clone()),
+            socket(),
+            options.clone(),
+        )
+        .expect("test operation succeeds");
+        let client = Endpoint::client_with_socket(pki.client_config(true), socket(), options)
+            .expect("test operation succeeds");
+        let (s, c) = pair(&server, &client).await;
+        for connection in [&s, &c] {
+            let info = connection.closed().await;
+            let close = info
+                .transport_close()
+                .expect("idle timeout carries transport detail");
+            assert_eq!(close.kind(), TransportCloseKind::TimedOut);
+            assert_eq!(close.code(), None);
+            assert_eq!(close.tls_alert(), None);
+        }
+        server.close(ApplicationCode::default(), b"");
+        client.close(ApplicationCode::default(), b"");
+        tokio::join!(server.wait_idle(), client.wait_idle());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn application_and_local_closes_remain_distinct() {
+    bounded(async {
+        let pki = Pki::new();
+        let (server, client) = pki.endpoints();
+        let (s, c) = pair(&server, &client).await;
+        s.close(
+            ApplicationCode::new(9).expect("test operation succeeds"),
+            b"local",
+        );
+        let local = s.closed().await;
+        assert!(local.transport_close().is_none());
+        assert!(matches!(local, CloseInfo::Local));
+        let peer = c.closed().await;
+        assert!(peer.transport_close().is_none());
+        assert!(
+            matches!(peer, CloseInfo::Application { code, reason } if code.get() == 9 && reason == b"local")
+        );
+        server.close(ApplicationCode::default(), b"");
+        client.close(ApplicationCode::default(), b"");
+        tokio::join!(server.wait_idle(), client.wait_idle());
+    })
+    .await;
+}
+
+fn assert_crypto_close(error: &TransportError, alert: AlertDescription) {
+    let close = error
+        .transport_close()
+        .expect("connection failure carries a transport close");
+    assert_eq!(close.kind(), TransportCloseKind::Crypto);
+    assert_eq!(close.tls_alert(), Some(alert));
+    assert_eq!(
+        close.code().expect("crypto close carries a code").get(),
+        0x100 + u64::from(u8::from(alert))
+    );
 }
 
 #[tokio::test]
@@ -389,6 +612,25 @@ fn checked_options_and_codes() {
         ApplicationCode::MAX
     );
     assert!(ApplicationCode::new(u64::MAX).is_err());
+    assert_eq!(
+        TransportCode::new(TransportCode::MAX)
+            .expect("test operation succeeds")
+            .get(),
+        TransportCode::MAX
+    );
+    assert!(TransportCode::new(TransportCode::MAX + 1).is_err());
+    assert_eq!(
+        TransportCode::new(0x100 + u64::from(u8::from(AlertDescription::HandshakeFailure)))
+            .expect("test operation succeeds")
+            .tls_alert(),
+        Some(AlertDescription::HandshakeFailure)
+    );
+    assert_eq!(
+        TransportCode::new(42)
+            .expect("test operation succeeds")
+            .tls_alert(),
+        None
+    );
     for options in [
         TransportOptions {
             max_concurrent_bidi_streams: (1 << 60) + 1,

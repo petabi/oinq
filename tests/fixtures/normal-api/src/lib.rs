@@ -1,7 +1,8 @@
 //! This consumer intentionally has no direct Quinn dependency.
 use oinq::frame::{FrameLimit, FramedReader, FramedWriter};
 use oinq::{
-    ApplicationCode, CloseInfo, Connection, Endpoint, Incoming, TransportError, TransportOptions,
+    ApplicationCode, CloseInfo, Connection, Endpoint, Incoming, TransportClose,
+    TransportCloseKind, TransportError, TransportOptions,
 };
 use rustls::pki_types::CertificateDer;
 use std::{
@@ -41,6 +42,19 @@ pub fn certificates(connection: &Connection) -> Option<&[CertificateDer<'static>
 }
 pub async fn closed(connection: &Connection) -> CloseInfo {
     connection.closed().await
+}
+
+pub fn transport_close(error: &TransportError) -> Option<&TransportClose> {
+    error.transport_close()
+}
+
+pub fn close_kind(info: &CloseInfo) -> Option<TransportCloseKind> {
+    info.transport_close().map(TransportClose::kind)
+}
+
+pub fn tls_alert(info: &CloseInfo) -> Option<rustls::AlertDescription> {
+    info.transport_close()
+        .and_then(TransportClose::tls_alert)
 }
 
 pub async fn exchange(connection: &Connection) -> Result<(), Box<dyn std::error::Error>> {
