@@ -5,6 +5,19 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.1](https://github.com/petabi/oinq/compare/0.14.0...0.14.1) - 2026-11-24
+
+### Added
+
+- expose structured QUIC transport-close details ([#110](https://github.com/petabi/oinq/pull/110))
+
+### Other
+
+- run release-pr after skipped check job ([#108](https://github.com/petabi/oinq/pull/108))
+- cut duplicate runs and cache Rust builds ([#107](https://github.com/petabi/oinq/pull/107))
+- exclude CHANGELOG.md from markdownlint ([#106](https://github.com/petabi/oinq/pull/106))
+- automate releases with release-plz
+
 ## [0.14.0] - 2026-10-18
 
 ### Added
