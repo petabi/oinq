@@ -15,5 +15,6 @@ mod test;
 pub mod transport;
 pub use transport::{
     ApplicationCode, CloseInfo, Connection, Endpoint, Incoming, RecvStream, SendStream,
-    TransportError, TransportErrorKind, TransportOptions,
+    TransportClose, TransportCloseKind, TransportCode, TransportError, TransportErrorKind,
+    TransportOptions,
 };
