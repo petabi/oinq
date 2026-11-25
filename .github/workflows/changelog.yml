@@ -50,7 +50,10 @@ jobs:
             const changed = files.some(file =>
               file.filename === 'CHANGELOG.md' || file.previous_filename === 'CHANGELOG.md'
             );
-            const releasePr = pr.user.login === 'github-actions[bot]' &&
+            const releaseBot = `${params.owner.toLowerCase()}-release[bot]`;
+            const releaseAuthor = pr.user.login === 'github-actions[bot]' ||
+              pr.user.login === releaseBot;
+            const releasePr = releaseAuthor &&
               pr.user.type === 'Bot' &&
               pr.head.repo?.full_name === pr.base.repo.full_name &&
               pr.head.ref.startsWith('release-plz-') &&
