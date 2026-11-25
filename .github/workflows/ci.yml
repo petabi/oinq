@@ -199,7 +199,7 @@ jobs:
         fi
     - name: Update coverage to Codecov
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' && steps.codecov.outputs.enabled == 'true' }}
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v7
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
