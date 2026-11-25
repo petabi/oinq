@@ -4,10 +4,10 @@ name: Release-plz
 # the run succeeded and the commit is still the tip of main. A failed run
 # fails this workflow. A manual dispatch calls CI first.
 #
-# Release PRs are opened with GITHUB_TOKEN, so pull_request workflows on those
-# PRs need a writer to approve them. This workflow therefore validates the
-# release branch itself via workflow_call (check-release-pr) instead of relying
-# on the pull_request event. A GitHub App is not required for that path.
+# Release PRs are opened with the petabi-release GitHub App, so their CI, PR
+# title, and changelog workflows run automatically. The app token is scoped to
+# this repository and is used only by release-pr; the release job keeps
+# GITHUB_TOKEN. check-release-pr remains an extra validation of the branch.
 on:
   workflow_run:
     workflows: [CI]
@@ -29,7 +29,8 @@ jobs:
       contents: read
     with:
       ref: ${{ github.sha }}
-    secrets: inherit
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   blocked:
     name: CI failed
@@ -77,7 +78,7 @@ jobs:
         with:
           shared-key: release-plz
           save-if: false
-      - uses: release-plz/action@v0.5
+      - uses: release-plz/action@476794ede164c5137bfc3a1dc6ed3675275690f9 # v0.5.99
         with:
           command: release
           version: 0.4.3
@@ -91,8 +92,7 @@ jobs:
     if: ${{ always() && !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     outputs:
       pr: ${{ steps.release-plz.outputs.pr }}
       prs_created: ${{ steps.release-plz.outputs.prs_created }}
@@ -106,13 +106,22 @@ jobs:
         with:
           shared-key: release-plz
           save-if: false
-      - uses: release-plz/action@v0.5
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        id: release-token
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: release-plz/action@476794ede164c5137bfc3a1dc6ed3675275690f9 # v0.5.99
         id: release-plz
         with:
           command: release-pr
           version: 0.4.3
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
 
   check-release-pr:
     needs: release-pr
@@ -125,16 +134,5 @@ jobs:
       contents: read
     with:
       ref: ${{ fromJSON(needs.release-pr.outputs.pr).head_branch }}
-    secrets: inherit
-
-  check-release-changelog:
-    needs: release-pr
-    if: >-
-      ${{ always() && !cancelled() &&
-          needs.release-pr.result == 'success' &&
-          needs.release-pr.outputs.prs_created == 'true' }}
-    uses: ./.github/workflows/changelog.yml
-    permissions:
-      pull-requests: read
-    with:
-      pull_request_number: ${{ fromJSON(needs.release-pr.outputs.pr).number }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

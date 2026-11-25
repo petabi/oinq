@@ -15,6 +15,9 @@ on:
         description: Branch or commit to validate
         required: true
         type: string
+    secrets:
+      CODECOV_TOKEN:
+        required: false
 
 # A newer push to the same ref cancels the older run. A manual dispatch and a
 # re-run (`run_attempt` above 1) get a group of their own, so a later push
