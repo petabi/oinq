@@ -538,8 +538,10 @@ impl Endpoint {
     /// consume an establishment attempt.
     pub async fn accept(&self) -> Option<Incoming> {
         let incoming = self.inner.accept().await?;
+        let remote_addr = incoming.remote_address();
         let endpoint = self.clone();
         Some(Incoming {
+            remote_addr,
             future: Box::pin(async move {
                 let inner = incoming.await.map_err(connection_error)?;
                 Ok(Connection::new(inner, endpoint))
@@ -616,7 +618,18 @@ fn stopped_error(e: quinn::StoppedError) -> TransportError {
 /// the endpoint can continue accepting connections.
 #[must_use = "incoming connections must be awaited to establish them"]
 pub struct Incoming {
+    remote_addr: SocketAddr,
     future: Pin<Box<dyn Future<Output = Result<Connection, TransportError>> + Send>>,
+}
+
+impl Incoming {
+    /// Returns the peer's socket address as seen when the attempt was accepted.
+    ///
+    /// It is available before the attempt is awaited and after a failed handshake.
+    #[must_use]
+    pub fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
+    }
 }
 
 impl Future for Incoming {

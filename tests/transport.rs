@@ -350,6 +350,58 @@ async fn rejected_client_certificate_reports_handshake_failure() {
 }
 
 #[tokio::test]
+async fn incoming_reports_the_peer_address_before_the_handshake() {
+    bounded(async {
+        let pki = Pki::new();
+        let server = Endpoint::server_with_socket(
+            pki.rejecting_server_config(),
+            socket(),
+            TransportOptions::default(),
+        )
+        .expect("test operation succeeds");
+        let client = Endpoint::client_with_socket(
+            pki.client_config(true),
+            socket(),
+            TransportOptions::default(),
+        )
+        .expect("test operation succeeds");
+        let client_addr = client.local_addr().expect("bound socket address");
+        let server_addr = server.local_addr().expect("bound socket address");
+        let (connected, accepted) = tokio::join!(client.connect(server_addr, "localhost"), async {
+            let incoming = server.accept().await.expect("listener is open");
+            assert_eq!(incoming.remote_addr(), client_addr);
+            incoming.await
+        });
+        let error = accepted.expect_err("server rejects the client certificate");
+        assert_crypto_close(&error, AlertDescription::HandshakeFailure);
+        drop(connected);
+        server.close(ApplicationCode::default(), b"");
+        client.close(ApplicationCode::default(), b"");
+        tokio::join!(server.wait_idle(), client.wait_idle());
+
+        let (server, client) = pki.endpoints();
+        let client_addr = client.local_addr().expect("bound socket address");
+        let server_addr = server.local_addr().expect("bound socket address");
+        let (connected, accepted) = tokio::join!(client.connect(server_addr, "localhost"), async {
+            let incoming = server.accept().await.expect("listener is open");
+            let addr = incoming.remote_addr();
+            assert_eq!(addr, client_addr);
+            (addr, incoming.await)
+        });
+        let (addr, accepted) = accepted;
+        let accepted = accepted.expect("handshake succeeds");
+        assert_eq!(accepted.remote_addr(), addr);
+        let connected = connected.expect("handshake succeeds");
+        connected.close(ApplicationCode::default(), b"");
+        accepted.close(ApplicationCode::default(), b"");
+        server.close(ApplicationCode::default(), b"");
+        client.close(ApplicationCode::default(), b"");
+        tokio::join!(server.wait_idle(), client.wait_idle());
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn idle_timeout_reports_non_crypto_close() {
     bounded(async {
         let pki = Pki::new();
