@@ -623,12 +623,9 @@ pub struct Incoming {
 }
 
 impl Incoming {
-    /// Returns the socket address this attempt came from.
+    /// Returns the peer's socket address as seen when the attempt was accepted.
     ///
-    /// It is available before the attempt is awaited and whatever the handshake's
-    /// outcome, so a failed handshake can still be attributed to a peer. It is the
-    /// address seen when the attempt was accepted; a later migration of the
-    /// established connection is reported by [`Connection::remote_addr`].
+    /// It is available before the attempt is awaited and after a failed handshake.
     #[must_use]
     pub fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
