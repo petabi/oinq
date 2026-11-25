@@ -82,7 +82,7 @@ jobs:
         cargo check --no-default-features
         cargo check --all-features
     - name: markdownlint
-      uses: DavidAnson/markdownlint-cli2-action@v24
+      uses: DavidAnson/markdownlint-cli2-action@v25
       with:
         globs: |
           **/*.md
