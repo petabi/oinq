@@ -5,6 +5,20 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.3](https://github.com/petabi/oinq/compare/0.14.2...0.14.3) - 2026-11-25
+
+### Other
+
+- update release-plz action for rustdoc v61 ([#122](https://github.com/petabi/oinq/pull/122))
+- *(deps)* bump actions/upload-pages-artifact from 3 to 5 ([#119](https://github.com/petabi/oinq/pull/119))
+- *(deps)* bump actions/github-script from 8 to 9 ([#118](https://github.com/petabi/oinq/pull/118))
+- *(deps)* bump actions/deploy-pages from 4 to 5 ([#117](https://github.com/petabi/oinq/pull/117))
+- authenticate Codecov uploads with OIDC ([#121](https://github.com/petabi/oinq/pull/121))
+- *(deps)* bump DavidAnson/markdownlint-cli2-action from 24 to 25 ([#116](https://github.com/petabi/oinq/pull/116))
+- *(deps)* bump codecov/codecov-action from 4 to 7 ([#115](https://github.com/petabi/oinq/pull/115))
+- skip the Codecov upload when no token is available ([#120](https://github.com/petabi/oinq/pull/120))
+- open release PRs with the petabi-release app ([#114](https://github.com/petabi/oinq/pull/114))
+
 ## [0.14.2](https://github.com/petabi/oinq/compare/0.14.1...0.14.2) - 2026-11-25
 
 ### Added
