@@ -27,10 +27,9 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
+      id-token: write
     with:
       ref: ${{ github.sha }}
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   blocked:
     name: CI failed
@@ -132,7 +131,6 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
+      id-token: write
     with:
       ref: ${{ fromJSON(needs.release-pr.outputs.pr).head_branch }}
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

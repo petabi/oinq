@@ -15,9 +15,6 @@ on:
         description: Branch or commit to validate
         required: true
         type: string
-    secrets:
-      CODECOV_TOKEN:
-        required: false
 
 # A newer push to the same ref cancels the older run. A manual dispatch and a
 # re-run (`run_attempt` above 1) get a group of their own, so a later push
@@ -148,6 +145,13 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    # Codecov authenticates with an OIDC token instead of a stored secret, so
+    # Dependabot pull requests can upload without a separate Dependabot secret.
+    # Fork pull requests get no ID token; the action falls back to their
+    # prefixed tokenless upload.
+    permissions:
+      contents: read
+      id-token: write
     steps:
     - uses: actions/checkout@v6
       with:
@@ -176,32 +180,10 @@ jobs:
     - name: Generate code coverage
       if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-    - name: Decide whether to upload coverage to Codecov
-      id: codecov
-      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-        BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
-      run: |
-        # Dependabot pull requests read only Dependabot secrets, and Codecov
-        # rejects a tokenless upload for a commit on a protected branch. Skip
-        # the upload instead of failing the job after the report is generated.
-        # Fork pull requests get no secrets either, but Codecov accepts their
-        # tokenless uploads because the action prefixes the branch name.
-        if [ -n "$CODECOV_TOKEN" ]; then
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-        elif [ -n "$HEAD_REPO" ] && [ "$HEAD_REPO" != "$BASE_REPO" ]; then
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "enabled=false" >> "$GITHUB_OUTPUT"
-          echo "::notice::No Codecov token is available; skipping the upload."
-        fi
     - name: Update coverage to Codecov
-      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' && steps.codecov.outputs.enabled == 'true' }}
+      if: ${{ !cancelled() && steps.gate.outputs.cargo == 'true' && steps.gate.conclusion == 'success' }}
       uses: codecov/codecov-action@v7
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
         files: lcov.info
         fail_ci_if_error: true
+        use_oidc: true
